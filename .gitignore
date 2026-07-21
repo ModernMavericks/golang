@@ -1,0 +1,18 @@
+# Not committed: brainstorm/spec docs and other non-code notes (tracked out-of-band)
+docs/
+
+# Build outputs / fetched inputs. Heavy build I/O (WORK) defaults to a LOCAL disk
+# (~/.cache/mavericks-golang/work), OUTSIDE this NFS repo — see build/versions.sh.
+# build/work/ is kept only in case WORK is ever overridden back into the tree.
+build/work/
+*.pkg
+*.tar.gz
+*.a
+manifest/*.json
+
+# macOS cruft
+.DS_Store
+
+# macOS AppleDouble files
+._*
+build-updater/
