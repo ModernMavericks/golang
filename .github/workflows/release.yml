@@ -15,6 +15,11 @@ on:
 permissions:
   contents: write
 
+# Superseded pushes on the same ref cancel; each v* tag is a unique ref, so a publish is never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: macos-26   # Apple Silicon (arm64) — mirrors local Tahoe; use macos-15 if 26 is unavailable
@@ -130,6 +135,6 @@ jobs:
 
       - name: Publish GitHub Release
         if: github.ref_type == 'tag'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: dist/*
