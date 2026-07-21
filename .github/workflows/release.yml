@@ -1,0 +1,135 @@
+name: release
+
+# Builds BOTH go126 products on a modern Apple-Silicon runner and publishes them from one v* tag:
+#   - native (runs on 10.9): amd64/min-10.9 toolchain + x86_64 Sparkle updater + 10.9.5 floor
+#   - cross  (runs on modern macOS, targets 10.9): native arm64 toolchain + arm64 Sparkle updater
+# Each is EdDSA-signed with its own appcast (appcast.xml / appcast-cross.xml). No 10.9 runner
+# anywhere; the published artifacts are re-validated on a real 10.9 box out-of-band.
+
+on:
+  push:
+    branches: [main]   # regular build on every push to main — surfaces breakage off the release path
+    tags: ['*-mavericks.*']  # publish a Release only on tags (the sign + publish steps gate on ref_type == tag)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-26   # Apple Silicon (arm64) — mirrors local Tahoe; use macos-15 if 26 is unavailable
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version check (tag must match VERSION)
+        run: |
+          VER=$(cat VERSION)
+          if [ "${GITHUB_REF_TYPE}" = tag ] && [ "${GITHUB_REF_NAME}" != "$VER" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} != $VER (VERSION file) — appcast enclosure URL would 404"
+            exit 1
+          fi
+
+      - name: Install mavericks-shared-cmake
+        # shared-cmake installs itself via its own action (to $HOME/.local, self-registering in the
+        # CMake user package registry). We do NOT clone/`cmake --install` it by hand. @v1 is the moving
+        # major tag; Renovate's github-actions manager tracks it (no SHA, no marker comment). shared-cmake's
+        # config auto-scaffolds our .github/renovate.json. Consumed via find_package + versions.sh's MSC_SCRIPTS.
+        uses: ModernMavericks/shared-cmake/.github/actions/install@v1
+
+      - name: Install Rosetta 2 (amd64 bootstrap tools run under it)
+        run: softwareupdate --install-rosetta --agree-to-license || true
+
+      - name: Bootstrap Go (arm64, >= 1.24)
+        uses: actions/setup-go@v5
+        with: { go-version: '1.24.x' }
+
+      - name: pkgsrc rename guard
+        run: sh test/trust/rename-check.sh
+
+      - name: Trust-model unit tests
+        run: GOROOT_BOOTSTRAP="$(go env GOROOT)" sh test/trust/unit-trust.sh
+
+      - name: Cross-build the native toolchain
+        run: sh build/build-native.sh
+
+      - name: Compat guard on the shipped toolchain binaries
+        run: |
+          stage="$HOME/.cache/mavericks-golang/work/staging/usr/local/go126"
+          sh test/compat-guard.sh "$stage/bin/go" "$stage/bin/gofmt" "$stage"/pkg/tool/darwin_amd64/*
+
+      - name: Build the Sparkle updater app (Cocoa/ObjC; must not link Go)
+        run: |
+          BUILD="$HOME/.cache/mavericks-golang/build-updater"
+          # find_package resolves MavericksSharedCMake from the user package registry (installed above);
+          # no CMAKE_PREFIX_PATH, no vendored copy. The x86_64 Sparkle slice is auto-derived from the
+          # native updater's CMAKE_OSX_ARCHITECTURES by mavericks_add_updater_app.
+          cmake -S . -B "$BUILD" -DCMAKE_OBJC_COMPILER=/usr/bin/clang
+          cmake --build "$BUILD" --target GoUpdater
+          otool -L "$BUILD/GoUpdater.app/Contents/MacOS/GoUpdater" | tee /tmp/o.txt
+          ! grep -qi 'usr/local/go126' /tmp/o.txt || { echo "::error::updater links the toolchain it updates"; exit 1; }
+
+      - name: Package the native .pkg (updater + 10.9.5 floor) + tarball + manifest
+        run: sh build/package-pkg.sh
+
+      # --- cross product (runs on modern macOS, targets 10.9) ---
+      - name: Cross-build the cross toolchain (native arm64)
+        run: sh build/build-cross.sh
+
+      - name: Build the cross Sparkle updater app (native arm64)
+        run: |
+          BUILD="$HOME/.cache/mavericks-golang/build-updater-cross"
+          # The arm64 Sparkle slice is auto-derived from the cross updater's CMAKE_OSX_ARCHITECTURES
+          # (arm64, set by MAVGO_VARIANT=cross) -- no hand-plumbed framework path.
+          cmake -S . -B "$BUILD" -DMAVGO_VARIANT=cross -DCMAKE_OBJC_COMPILER=/usr/bin/clang
+          cmake --build "$BUILD" --target GoCrossUpdater
+
+      - name: Package the cross .pkg + tarball + manifest
+        run: UPD_APP="$HOME/.cache/mavericks-golang/build-updater-cross/GoCrossUpdater.app" sh build/package-cross-pkg.sh
+
+      - name: EdDSA-sign both .pkgs + generate both Sparkle appcasts
+        if: github.ref_type == 'tag'
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          GH_TOKEN: ${{ github.token }}   # sign_and_appcast.sh fetches ed25519-sign via `gh` -> needs auth (else 403 rate-limit)
+        run: |
+          [ -n "$SPARKLE_PRIVATE_KEY" ] || { echo "::error::SPARKLE_PRIVATE_KEY secret not set"; exit 1; }
+          # Resolve the installed shared-cmake scripts dir via the CMake user package registry.
+          SH="$(cat "$HOME/.cmake/packages/MavericksSharedCMake/"* | head -1)/scripts"
+          [ -d "$SH" ] || { echo "::error::shared-cmake scripts not found at $SH"; exit 1; }
+          VER=$(cat VERSION)
+          OUT="$HOME/.cache/mavericks-golang/work/out"
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/$VER"
+          # sign_and_appcast.sh auto-fetches the prebuilt ed25519-sign, signs the pkg, and renders the appcast.
+          # native -> appcast.xml (10.9.5 floor)
+          NPKG=$(ls "$OUT"/*native*.pkg | head -1)
+          sh "$SH/sign_and_appcast.sh" \
+            --channel-title "Mavericks Go 1.26" --version "$VER" \
+            --pkg-url "$base/$(basename "$NPKG")" --notes-file "release-notes/$VER.md" \
+            --pkg "$NPKG" --min-os 10.9.5 > "$OUT/appcast.xml"
+          # cross -> appcast-cross.xml (modern floor: the updater is arm64/min-11)
+          XPKG=$(ls "$OUT"/*cross*.pkg | head -1)
+          sh "$SH/sign_and_appcast.sh" \
+            --channel-title "Mavericks Go 1.26 (cross)" --version "$VER" \
+            --pkg-url "$base/$(basename "$XPKG")" --notes-file "release-notes/$VER.md" \
+            --pkg "$XPKG" --min-os 11.0 > "$OUT/appcast-cross.xml"
+          echo "=== appcast.xml ==="; cat "$OUT/appcast.xml"
+          echo "=== appcast-cross.xml ==="; cat "$OUT/appcast-cross.xml"
+
+      - name: Collect artifacts
+        run: |
+          OUT="$HOME/.cache/mavericks-golang/work/out"
+          mkdir -p dist
+          cp "$OUT"/*.pkg dist/                            # both products' installers (GHA installs via installer -pkg)
+          for f in appcast.xml appcast-cross.xml; do [ -f "$OUT/$f" ] && cp "$OUT/$f" dist/ || true; done
+          ( cd dist && shasum -a 256 *.pkg > SHA256SUMS )
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: golang-go126
+          path: dist/*
+
+      - name: Publish GitHub Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
