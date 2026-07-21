@@ -49,10 +49,10 @@ jobs:
         with: { go-version: '1.24.x' }
 
       - name: pkgsrc rename guard
-        run: sh test/trust/rename-check.sh
+        run: sh tests/trust/rename-check.sh
 
       - name: Trust-model unit tests
-        run: GOROOT_BOOTSTRAP="$(go env GOROOT)" sh test/trust/unit-trust.sh
+        run: GOROOT_BOOTSTRAP="$(go env GOROOT)" sh tests/trust/unit-trust.sh
 
       - name: Cross-build the native toolchain
         run: sh build/build-native.sh
@@ -60,11 +60,11 @@ jobs:
       - name: Compat guard on the shipped toolchain binaries
         run: |
           stage="$HOME/.cache/mavericks-golang/work/staging/usr/local/go126"
-          sh test/compat-guard.sh "$stage/bin/go" "$stage/bin/gofmt" "$stage"/pkg/tool/darwin_amd64/*
+          sh tests/compat-guard.sh "$stage/bin/go" "$stage/bin/gofmt" "$stage"/pkg/tool/darwin_amd64/*
 
       - name: Build the Sparkle updater app (Cocoa/ObjC; must not link Go)
         run: |
-          BUILD="$HOME/.cache/mavericks-golang/build-updater"
+          BUILD="build/updater"
           # find_package resolves MavericksSharedCMake from the user package registry (installed above);
           # no CMAKE_PREFIX_PATH, no vendored copy. The x86_64 Sparkle slice is auto-derived from the
           # native updater's CMAKE_OSX_ARCHITECTURES by mavericks_add_updater_app.
@@ -82,14 +82,14 @@ jobs:
 
       - name: Build the cross Sparkle updater app (native arm64)
         run: |
-          BUILD="$HOME/.cache/mavericks-golang/build-updater-cross"
+          BUILD="build/updater-cross"
           # The arm64 Sparkle slice is auto-derived from the cross updater's CMAKE_OSX_ARCHITECTURES
           # (arm64, set by MAVGO_VARIANT=cross) -- no hand-plumbed framework path.
           cmake -S . -B "$BUILD" -DMAVGO_VARIANT=cross -DCMAKE_OBJC_COMPILER=/usr/bin/clang
           cmake --build "$BUILD" --target GoCrossUpdater
 
       - name: Package the cross .pkg + tarball + manifest
-        run: UPD_APP="$HOME/.cache/mavericks-golang/build-updater-cross/GoCrossUpdater.app" sh build/package-cross-pkg.sh
+        run: UPD_APP="build/updater-cross/GoCrossUpdater.app" sh build/package-cross-pkg.sh
 
       - name: EdDSA-sign both .pkgs + generate both Sparkle appcasts
         if: github.ref_type == 'tag'

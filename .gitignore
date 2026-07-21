@@ -15,5 +15,6 @@ manifest/*.json
 
 # macOS AppleDouble files
 ._*
-build-updater/
+build/updater/
+build/updater-cross/
 .superpowers/
