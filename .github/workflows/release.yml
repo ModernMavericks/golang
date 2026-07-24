@@ -24,7 +24,7 @@ jobs:
   build:
     runs-on: macos-26   # Apple Silicon (arm64) — mirrors local Tahoe; use macos-15 if 26 is unavailable
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Version check (tag must match VERSION)
         run: |
