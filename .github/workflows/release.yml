@@ -74,7 +74,7 @@ jobs:
           ! grep -qi 'usr/local/go126' /tmp/o.txt || { echo "::error::updater links the toolchain it updates"; exit 1; }
 
       - name: Package the native .pkg (updater + 10.9.5 floor) + tarball + manifest
-        run: sh build/package-pkg.sh
+        run: UPD_APP="build/updater/GoUpdater.app" sh build/package-pkg.sh
 
       # --- cross product (runs on modern macOS, targets 10.9) ---
       - name: Cross-build the cross toolchain (native arm64)

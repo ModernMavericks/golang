@@ -9,7 +9,7 @@ test -f "$stage$PREFIX/etc/openssl/certs/ca-certificates.crt" || { echo "FATAL: 
 test -x "$stage$PREFIX/bin/mavericks-clang" || { echo "FATAL: CC wrapper not staged" >&2; exit 1; }
 
 out="$WORK/out"; mkdir -p "$out"
-base="golang-go126-native-${PKG_VERSION}-darwin-x86_64"
+base="go126-${GO_VERSION}-native-${PKG_VERSION#*-}"   # go126-1.26.4-native-mavericks.<rev>
 pkg="$out/$base.pkg"
 
 # Stage the Sparkle updater app + manual-trigger shim + daily-check LaunchAgent + the postinstall

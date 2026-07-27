@@ -7,7 +7,7 @@ MODE="${1:-staged}"   # staged | installer
 stage="$WORK/staging"
 
 if [ "$MODE" = installer ]; then
-  pkg="$WORK/out/golang-go126-native-${PKG_VERSION}-darwin-x86_64.pkg"
+  pkg="$WORK/out/go126-${GO_VERSION}-native-${PKG_VERSION#*-}.pkg"
   test -f "$pkg" || { echo "run package-pkg.sh first" >&2; exit 1; }
   rsync -a "$pkg" "$MAVERICKS_HOST:/tmp/go126.pkg"
   ssh "$MAVERICKS_HOST" "sudo installer -pkg /tmp/go126.pkg -target /"
