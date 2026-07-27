@@ -41,9 +41,6 @@ jobs:
         # config auto-scaffolds our .github/renovate.json. Consumed via find_package + versions.sh's MSC_SCRIPTS.
         uses: ModernMavericks/shared-cmake/.github/actions/install@v1
 
-      - name: Install Rosetta 2 (amd64 bootstrap tools run under it)
-        run: softwareupdate --install-rosetta --agree-to-license || true
-
       - name: Bootstrap Go (arm64, >= 1.24)
         uses: actions/setup-go@v7
         with: { go-version: '1.26.x' }
@@ -54,13 +51,18 @@ jobs:
       - name: Trust-model unit tests
         run: GOROOT_BOOTSTRAP="$(go env GOROOT)" sh tests/trust/unit-trust.sh
 
-      - name: Cross-build the native toolchain
+      - name: Cross-build the native toolchain (Rosetta-free)
         run: sh build/build-native.sh
 
       - name: Compat guard on the shipped toolchain binaries
         run: |
           stage="$HOME/.cache/mavericks-golang/work/staging/usr/local/go126"
           sh tests/compat-guard.sh "$stage/bin/go" "$stage/bin/gofmt" "$stage"/pkg/tool/darwin_amd64/*
+
+      - name: Optional amd64 self-test under Rosetta (best-effort, never gates)
+        run: |
+          softwareupdate --install-rosetta --agree-to-license || true
+          sh tests/rosetta-selftest.sh || true
 
       - name: Build the Sparkle updater app (Cocoa/ObjC; must not link Go)
         run: |
