@@ -11,12 +11,21 @@ export WORK="${MAVERICKS_WORK:-$HOME/.cache/mavericks-golang/work}"
 
 # Package version, shaped like ../mavericks-swift's VERSION: <upstream>-mavericks.<rev>
 # (e.g. 1.26.4-mavericks.1). Bump the -mavericks.N suffix for packaging-only
-# re-releases (patch/recipe changes) independent of upstream Go. GO_VERSION is
-# the upstream part, used to fetch source. The source tarball checksum is NOT pinned
-# here: build/fetch-go.sh verifies the download against go.dev's own published SHA256
-# (build/go-src-sha256.sh), so a Renovate version bump is self-contained.
-export PKG_VERSION="$(cat "$REPO_ROOT/VERSION")"
-export GO_VERSION="${PKG_VERSION%%-mavericks.*}"
+# re-releases (patch/recipe changes) independent of upstream Go. The source tarball
+# checksum is NOT pinned here: build/fetch-go.sh verifies the download against go.dev's
+# own published SHA256 (build/go-src-sha256.sh), so a Renovate version bump is self-contained.
+#
+# Upstream Go version is the Renovate-tracked UPSTREAM_VERSION (bare x.y.z). The full
+# package version lives in VERSION (<upstream>-mavericks.N), which the release workflow
+# writes and .gitignore excludes; before a release is cut (local/CI build) fall back to
+# the computed auto version so a build never depends on a committed VERSION file.
+. "$REPO_ROOT/build/lib.sh"
+export GO_VERSION="$(upstream_version)"
+if [ -f "$REPO_ROOT/VERSION" ]; then
+  export PKG_VERSION="$(cat "$REPO_ROOT/VERSION")"
+else
+  export PKG_VERSION="$(sh "$REPO_ROOT/build/version.sh" auto | sed -n 's/^FULL=//p')"
+fi
 export GO_SRC_URL="https://go.dev/dl/go${GO_VERSION}.src.tar.gz"
 
 # The 10.9 legacy-support shim is fetched PREBUILT from the mavericks-legacysupport

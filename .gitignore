@@ -10,6 +10,11 @@ build/work/
 *.a
 manifest/*.json
 
+# Full package version (<upstream>-mavericks.N). Workflow-written by release.yml (or a
+# local test/build/version.sh run) — not committed. See build/version.sh, build/lib.sh.
+/VERSION
+/dist/
+
 # macOS cruft
 .DS_Store
 
