@@ -1,28 +1,23 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["github>ModernMavericks/shared-cmake"],
+  "ignoreTests": false,
   "customManagers": [
     {
       "customType": "regex",
-      "managerFilePatterns": ["/(^|/)VERSION$/"],
-      "matchStrings": ["(?<currentValue>\\d+\\.\\d+\\.\\d+)-mavericks\\.\\d+"],
-      "datasourceTemplate": "golang-version",
-      "versioningTemplate": "semver",
+      "managerFilePatterns": ["/^UPSTREAM_VERSION$/"],
+      "matchStrings": ["^(?<currentValue>.+?)\\s*$"],
       "depNameTemplate": "go",
-      "autoReplaceStringTemplate": "{{{newValue}}}-mavericks.1"
+      "datasourceTemplate": "golang-version"
     }
   ],
   "packageRules": [
     {
-      "matchDatasources": ["golang-version"],
       "matchDepNames": ["go"],
       "matchUpdateTypes": ["patch"],
-      "automerge": true,
-      "automergeType": "pr",
-      "platformAutomerge": true
+      "automerge": true
     },
     {
-      "matchDatasources": ["golang-version"],
       "matchDepNames": ["go"],
       "matchUpdateTypes": ["minor", "major"],
       "automerge": false
