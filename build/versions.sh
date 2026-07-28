@@ -10,10 +10,11 @@ export REPO_ROOT
 export WORK="${MAVERICKS_WORK:-$HOME/.cache/mavericks-golang/work}"
 
 # Package version, shaped like ../mavericks-swift's VERSION: <upstream>-mavericks.<rev>
-# (e.g. 1.26.4-mavericks.1). Bump the -mavericks.N suffix for packaging-only
-# re-releases (patch/recipe changes) independent of upstream Go. The source tarball
-# checksum is NOT pinned here: build/fetch-go.sh verifies the download against go.dev's
-# own published SHA256 (build/go-src-sha256.sh), so a Renovate version bump is self-contained.
+# (e.g. 1.26.4-mavericks.1). A packaging-only re-release (patch/recipe changes, independent
+# of upstream Go) is now cut via workflow_dispatch local_release=true, which computes the
+# next -mavericks.N itself — do not hand-edit VERSION. The source tarball checksum is NOT
+# pinned here: build/fetch-go.sh verifies the download against go.dev's own published
+# SHA256 (build/go-src-sha256.sh), so a Renovate version bump is self-contained.
 #
 # Upstream Go version is the Renovate-tracked UPSTREAM_VERSION (bare x.y.z). The full
 # package version lives in VERSION (<upstream>-mavericks.N), which the release workflow

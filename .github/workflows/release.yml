@@ -28,10 +28,10 @@ on:
 permissions:
   contents: write
 
-# Superseded pushes on the same ref cancel; each v* tag is a unique ref, so a publish is never cancelled.
+# Do not cancel in-progress runs: a push-to-main auto-cut release shares the main ref and must run to completion.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -56,8 +56,8 @@ jobs:
             full="$(printf '%s\n' "$out" | sed -n 's/^FULL=//p')"
             tag="$(printf '%s\n'  "$out" | sed -n 's/^TAG=//p')"
             rel="$(printf '%s\n'  "$out" | sed -n 's/^RELEASE=//p')"
-            # never publish from a PR or a non-main branch push — only main pushes / dispatch cut releases
-            if [ "$GITHUB_EVENT_NAME" = pull_request ] || { [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF_NAME" != main ]; }; then
+            # only main (push or workflow_dispatch) cuts releases; PRs and non-main branches never publish
+            if [ "$GITHUB_REF_NAME" != main ]; then
               rel=no
             fi
           fi
@@ -134,6 +134,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}   # sign_and_appcast.sh fetches ed25519-sign via `gh` -> needs auth (else 403 rate-limit)
         run: |
           [ -n "$SPARKLE_PRIVATE_KEY" ] || { echo "::error::SPARKLE_PRIVATE_KEY secret not set"; exit 1; }
+          # Resolve the installed shared-cmake scripts dir via the CMake user package registry.
           SH="$(cat "$HOME/.cmake/packages/MavericksSharedCMake/"* | head -1)/scripts"
           [ -d "$SH" ] || { echo "::error::shared-cmake scripts not found at $SH"; exit 1; }
           VER="${{ steps.ver.outputs.full }}"; TAG="${{ steps.ver.outputs.tag }}"
@@ -141,11 +142,14 @@ jobs:
           OUT="$HOME/.cache/mavericks-golang/work/out"
           base="https://github.com/${GITHUB_REPOSITORY}/releases/download/$TAG"
           NPKG=$(ls "$OUT"/*native*.pkg | head -1)
+          # sign_and_appcast.sh auto-fetches the prebuilt ed25519-sign, signs the pkg, and renders the appcast.
+          # native -> appcast.xml (10.9.5 floor)
           sh "$SH/sign_and_appcast.sh" \
             --channel-title "Mavericks Go 1.26" --version "$VER" \
             --pkg-url "$base/$(basename "$NPKG")" --notes-file "$NOTES" \
             --pkg "$NPKG" --min-os 10.9.5 > "$OUT/appcast.xml"
           XPKG=$(ls "$OUT"/*cross*.pkg | head -1)
+          # cross -> appcast-cross.xml (modern floor: the updater is arm64/min-11)
           sh "$SH/sign_and_appcast.sh" \
             --channel-title "Mavericks Go 1.26 (cross)" --version "$VER" \
             --pkg-url "$base/$(basename "$XPKG")" --notes-file "$NOTES" \
