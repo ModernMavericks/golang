@@ -1,6 +1,7 @@
 name: release
 
-# Builds BOTH go126 products on a modern Apple-Silicon runner and publishes them from one v* tag:
+# Builds BOTH go126 products on a modern Apple-Silicon runner and publishes them on a matching tag,
+# or on a push to main whose VERSION has no release yet:
 #   - native (runs on 10.9): amd64/min-10.9 toolchain + x86_64 Sparkle updater + 10.9.5 floor
 #   - cross  (runs on modern macOS, targets 10.9): native arm64 toolchain + arm64 Sparkle updater
 # Each is EdDSA-signed with its own appcast (appcast.xml / appcast-cross.xml). No 10.9 runner
@@ -9,7 +10,7 @@ name: release
 on:
   push:
     branches: [main]   # regular build on every push to main — surfaces breakage off the release path
-    tags: ['*-mavericks.*']  # publish a Release only on tags (the sign + publish steps gate on ref_type == tag)
+    tags: ['*-mavericks.*']  # sign + publish gate on the "Decide whether to publish" step's do_publish output
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -72,6 +73,9 @@ jobs:
 
       - name: Trust-model unit tests
         run: GOROOT_BOOTSTRAP="$(go env GOROOT)" sh tests/trust/unit-trust.sh
+
+      - name: Unit tests (release tooling)
+        run: sh tests/go-src-sha256-test.sh && sh tests/render-release-notes-test.sh
 
       - name: Cross-build the native toolchain (Rosetta-free)
         run: sh build/build-native.sh
@@ -166,4 +170,5 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.publish.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           files: dist/*

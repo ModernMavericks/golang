@@ -7,6 +7,7 @@
       "managerFilePatterns": ["/(^|/)VERSION$/"],
       "matchStrings": ["(?<currentValue>\\d+\\.\\d+\\.\\d+)-mavericks\\.\\d+"],
       "datasourceTemplate": "golang-version",
+      "versioningTemplate": "semver",
       "depNameTemplate": "go",
       "autoReplaceStringTemplate": "{{{newValue}}}-mavericks.1"
     }

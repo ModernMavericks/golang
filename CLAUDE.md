@@ -23,6 +23,8 @@ GitHub Releases. Ships as `go126-<gover>-native-mavericks.<rev>.pkg` and
 - Renovate auto-bumps upstream Go **patch** releases to `<newgo>-mavericks.1` and automerges the
   PR (`.github/renovate.json` customManager + `packageRules`); minor/major Go bumps land as
   normal, non-automerged PRs for manual review.
+- For an auto-release, just let the VERSION bump reach `main` — CI publishes it. Don't also push
+  a manual tag; that re-triggers CI and rebuilds/republishes the same release.
 
 ## Non-obvious invariants (details in `memory/`)
 
