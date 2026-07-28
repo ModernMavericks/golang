@@ -10,6 +10,8 @@ on:
   push:
     branches: [main]   # regular build on every push to main — surfaces breakage off the release path
     tags: ['*-mavericks.*']  # publish a Release only on tags (the sign + publish steps gate on ref_type == tag)
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -33,6 +35,26 @@ jobs:
             echo "::error::tag ${GITHUB_REF_NAME} != $VER (VERSION file) — appcast enclosure URL would 404"
             exit 1
           fi
+
+      - name: Decide whether to publish
+        id: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VER=$(cat VERSION)
+          do_publish=false; tag=""
+          if [ "${GITHUB_REF_TYPE}" = tag ]; then
+            do_publish=true; tag="${GITHUB_REF_NAME}"
+          elif [ "${GITHUB_EVENT_NAME}" = push ] && [ "${GITHUB_REF_NAME}" = main ]; then
+            if gh release view "$VER" >/dev/null 2>&1; then
+              echo "release $VER already exists — not republishing"
+            else
+              do_publish=true; tag="$VER"
+            fi
+          fi
+          echo "do_publish=$do_publish" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Publish decision: do_publish=$do_publish tag=$tag"
 
       - name: Install mavericks-shared-cmake
         # shared-cmake installs itself via its own action (to $HOME/.local, self-registering in the
@@ -93,8 +115,12 @@ jobs:
       - name: Package the cross .pkg + tarball + manifest
         run: UPD_APP="build/updater-cross/GoCrossUpdater.app" sh build/package-cross-pkg.sh
 
+      - name: Render release notes if missing
+        if: steps.publish.outputs.do_publish == 'true'
+        run: sh build/render-release-notes.sh "$(cat VERSION)"
+
       - name: EdDSA-sign both .pkgs + generate both Sparkle appcasts
-        if: github.ref_type == 'tag'
+        if: steps.publish.outputs.do_publish == 'true'
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
           GH_TOKEN: ${{ github.token }}   # sign_and_appcast.sh fetches ed25519-sign via `gh` -> needs auth (else 403 rate-limit)
@@ -136,7 +162,8 @@ jobs:
           path: dist/*
 
       - name: Publish GitHub Release
-        if: github.ref_type == 'tag'
+        if: steps.publish.outputs.do_publish == 'true'
         uses: softprops/action-gh-release@v3
         with:
+          tag_name: ${{ steps.publish.outputs.tag }}
           files: dist/*
