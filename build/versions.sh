@@ -12,11 +12,12 @@ export WORK="${MAVERICKS_WORK:-$HOME/.cache/mavericks-golang/work}"
 # Package version, shaped like ../mavericks-swift's VERSION: <upstream>-mavericks.<rev>
 # (e.g. 1.26.4-mavericks.1). Bump the -mavericks.N suffix for packaging-only
 # re-releases (patch/recipe changes) independent of upstream Go. GO_VERSION is
-# the upstream part, used to fetch source; keep GO_SRC_SHA512 in sync with it.
+# the upstream part, used to fetch source. The source tarball checksum is NOT pinned
+# here: build/fetch-go.sh verifies the download against go.dev's own published SHA256
+# (build/go-src-sha256.sh), so a Renovate version bump is self-contained.
 export PKG_VERSION="$(cat "$REPO_ROOT/VERSION")"
 export GO_VERSION="${PKG_VERSION%%-mavericks.*}"
 export GO_SRC_URL="https://go.dev/dl/go${GO_VERSION}.src.tar.gz"
-export GO_SRC_SHA512="adacc6a34ad239d98277acd2ac8da867110da0b184dbbafb82e8a06d2b7fd23434f878a8a8cd550172c21bd31ac6391d01a0bd095c9f5c1250be66b459c8de88"
 
 # The 10.9 legacy-support shim is fetched PREBUILT from the mavericks-legacysupport
 # release (ModernMavericks/macports-legacy-support) — no from-source build here. Integrity is
