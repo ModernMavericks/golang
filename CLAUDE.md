@@ -18,13 +18,21 @@ GitHub Releases. Ships as `go126-<gover>-native-mavericks.<rev>.pkg` and
   `.pkg` + tarball + `manifest/`.
 - `MAVERICKS_HOST=ultimate-hat sh test/smoke-mavericks.sh [installer]` — on-box smoke.
 - `sh test/trust/smoke-trust.sh` — TLS-trust acceptance (pinned LE endpoints).
-- `.github/workflows/release.yml` — CI build → EdDSA-sign → appcast → Release on `v*` tags.
-- Version lives in `VERSION` (`<upstream>-mavericks.<rev>`, bump the suffix for repackaging).
-- Renovate auto-bumps upstream Go **patch** releases to `<newgo>-mavericks.1` and automerges the
-  PR (`.github/renovate.json` customManager + `packageRules`); minor/major Go bumps land as
-  normal, non-automerged PRs for manual review.
-- For an auto-release, just let the VERSION bump reach `main` — CI publishes it. Don't also push
-  a manual tag; that re-triggers CI and rebuilds/republishes the same release.
+- `.github/workflows/release.yml` — CI build → EdDSA-sign → appcast → Release. Three triggers: push
+  to `main` (auto-cuts `<upstream>-mavericks.1` if unreleased), a `*-mavericks.*` tag, or
+  `workflow_dispatch local_release=true`.
+- Upstream Go version lives in `UPSTREAM_VERSION` (bare `x.y.z`, Renovate-managed). `build/version.sh
+  <auto|local>` derives the full `<upstream>-mavericks.N` + a `RELEASE=yes/no` decision from
+  existing `*-mavericks.*` tags: `auto` is `N=1`/`RELEASE=yes` for a new upstream (no tag yet),
+  else current `N`/`RELEASE=no`; `local` (via `workflow_dispatch local_release`) is always
+  `N=maxN+1`/`RELEASE=yes`. `VERSION` (the full string) is workflow-written and **gitignored** —
+  never committed.
+- Renovate auto-bumps `UPSTREAM_VERSION` for upstream Go **patch** releases and automerges the PR
+  (`.github/renovate.json` customManager + `packageRules`, `ignoreTests: false` so automerge waits
+  for a green build); minor/major Go bumps land as normal, non-automerged PRs for manual review.
+- A push to `main` whose upstream has no release yet auto-cuts `<upstream>-mavericks.1` via
+  `gh release create` in `release.yml` (no PAT — `gh` mints the tag itself). Don't also push a
+  manual tag for that release; that re-triggers CI and rebuilds/republishes the same version.
 
 ## Non-obvious invariants (details in `memory/`)
 
@@ -36,8 +44,9 @@ GitHub Releases. Ships as `go126-<gover>-native-mavericks.<rev>.pkg` and
   inject the shim directly. [[mavericks-go126-downstream-linking]]
 - **Distrust acceptance uses LE's pinned `valid-isrgrootx1/x2` endpoints**, not public sites. [[mavericks-trust-test-endpoints]]
 - **Sparkle updater + EdDSA keys** (private key = `SPARKLE_PRIVATE_KEY` secret). [[mavericks-go126-sparkle-updater]]
-- **Renovate's Go patch auto-release trusts go.dev's feed-verified sha256** (`build/fetch-go.sh`),
-  not a pinned checksum, and requires no PAT/App token — deliberately, so don't add one.
+- **Renovate's Go patch auto-release trusts go.dev's feed-verified sha256** (`build/fetch-go.sh`,
+  `build/go-src-sha256.sh`), not a pinned checksum, and requires no PAT/App token — deliberately,
+  so don't add one.
 - Apple `/usr/bin/clang` required for cgo/ObjC. Reuse `../mavericks-shared-cmake`; don't duplicate.
 
 ## Design docs
