@@ -5,8 +5,8 @@ Cross-builds a **patched Go 1.26.4 toolchain that installs and runs on Mac OS X 
 auto-updater — entirely on modern hardware. No 10.9 build runner anywhere.
 
 **Status:** built and proven end-to-end on real 10.9.5 hardware (`ultimate-hat`), and published to
-GitHub Releases. Ships as `go126-<gover>-native-mavericks.<rev>.pkg` and
-`go126-<gover>-cross-mavericks.<rev>.pkg` (native installs to `/usr/local/go126`).
+GitHub Releases. Ships as `golang-<gover>-native-mavericks.<rev>.pkg` and
+`golang-<gover>-cross-mavericks.<rev>.pkg` (native installs to `/usr/local/go126`).
 
 ## Build / release
 

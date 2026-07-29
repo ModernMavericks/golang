@@ -8,7 +8,7 @@ test -x "$stage$CROSS_PREFIX/bin/go" || { echo "run build-cross.sh first" >&2; e
 test -x "$stage$CROSS_PREFIX/bin/mavericks-cross-clang" || { echo "FATAL: cross CC wrapper not staged" >&2; exit 1; }
 
 out="$WORK/out"; mkdir -p "$out"
-base="go126-${GO_VERSION}-cross-${PKG_VERSION#*-}"   # go126-1.26.4-cross-mavericks.<rev>
+base="golang-${GO_VERSION}-cross-${PKG_VERSION#*-}"   # golang-1.26.5-cross-mavericks.<rev>
 pkg="$out/$base.pkg"
 
 # Stage the modern Sparkle updater + shim + LaunchAgent + postinstall via the shared helper.
