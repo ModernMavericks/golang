@@ -268,10 +268,13 @@ jobs:
         run: |
           set -eu
           ls dist/appcast.xml dist/appcast-cross.xml >/dev/null   # a feed with no appcast is a broken product
-          if ! gh release view "feed-$LINE" >/dev/null 2>&1; then
-            gh release create "feed-$LINE" --prerelease \
+          # --repo on every call: this job downloads an artifact and never checks out, so `gh` has no
+          # git remote to infer the repository from ("fatal: not a git repository").
+          R="$GITHUB_REPOSITORY"
+          if ! gh release view "feed-$LINE" --repo "$R" >/dev/null 2>&1; then
+            gh release create "feed-$LINE" --repo "$R" --prerelease \
               --title "go$LINE update feed" \
               --notes "Sparkle appcast for the go$LINE line. Its assets are replaced on every go$LINE release; the tag itself never moves, which is the point -- installed updaters poll this URL and must never be handed another line's release."
           fi
-          gh release upload "feed-$LINE" dist/appcast.xml dist/appcast-cross.xml --clobber
+          gh release upload "feed-$LINE" --repo "$R" dist/appcast.xml dist/appcast-cross.xml --clobber
           echo "feed-$LINE now serves $VER"
