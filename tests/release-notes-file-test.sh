@@ -25,15 +25,14 @@ case "$p2" in */release-notes/*) echo "FAIL absent should be temp: $p2"; exit 1;
 grep -q '9.9.9' "$p2" || { echo "FAIL generated missing version"; cat "$p2"; exit 1; }
 rm -f "$p2"
 
-# Tolerance must not mean invisibility: if the shared-cmake scripts resolve to a directory that does
-# not have them (a stale install), the notes still publish -- but say so on stderr, or a release
-# quietly loses its ingredient section and nobody finds out.
+# The logic now lives in shared-cmake and this is a thin wrapper, so a scripts dir without it is a
+# broken environment, not a degraded one: fail loudly rather than quietly returning notes with no
+# ingredient section. (The old per-repo copy warned and carried on; a warning nobody reads is how a
+# release silently loses its section.)
 empty="$(mktemp -d)"
-err="$(MAVERICKS_SHARED_SCRIPTS="$empty" sh "$script" 9.9.9-mavericks.1 9.9.9-mavericks.1 2>&1 >/dev/null)"
-printf '%s\n' "$err" | grep -qi 'ingredient' \
-  || { echo "FAIL stale scripts dir should warn on stderr; got: '$err'"; exit 1; }
-p3="$(MAVERICKS_SHARED_SCRIPTS="$empty" sh "$script" 9.9.9-mavericks.1 9.9.9-mavericks.1 2>/dev/null)"
-[ -s "$p3" ] || { echo "FAIL notes must still be produced when scripts are missing"; exit 1; }
-rm -rf "$empty"; rm -f "$p3"
+if MSC_SCRIPTS="$empty" sh "$script" 9.9.9-mavericks.1 9.9.9-mavericks.1 >/dev/null 2>&1; then
+  echo "FAIL a scripts dir without release-notes-file.sh must fail, not silently degrade"; exit 1
+fi
+rm -rf "$empty"
 
 echo "PASS: release-notes-file"

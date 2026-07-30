@@ -44,6 +44,13 @@ jobs:
         with:
           fetch-depth: 0   # build/version.sh counts existing <upstream>-mavericks.* tags
 
+      - name: Install mavericks-shared-cmake
+        # shared-cmake installs itself via its own action (to $HOME/.local, self-registering in the
+        # CMake user package registry). We do NOT clone/`cmake --install` it by hand. @v1 is the moving
+        # major tag; Renovate's github-actions manager tracks it (no SHA, no marker comment). shared-cmake's
+        # config auto-scaffolds our .github/renovate.json. Consumed via find_package + versions.sh's MSC_SCRIPTS.
+        uses: ModernMavericks/shared-cmake/.github/actions/install@v1
+
       - name: Compute version
         id: ver
         run: |
@@ -67,13 +74,6 @@ jobs:
           printf '%s\n' "$full" > VERSION
           { echo "full=$full"; echo "tag=$tag"; echo "release=$rel"; } >> "$GITHUB_OUTPUT"
           echo "version=$full tag=$tag release=$rel"
-
-      - name: Install mavericks-shared-cmake
-        # shared-cmake installs itself via its own action (to $HOME/.local, self-registering in the
-        # CMake user package registry). We do NOT clone/`cmake --install` it by hand. @v1 is the moving
-        # major tag; Renovate's github-actions manager tracks it (no SHA, no marker comment). shared-cmake's
-        # config auto-scaffolds our .github/renovate.json. Consumed via find_package + versions.sh's MSC_SCRIPTS.
-        uses: ModernMavericks/shared-cmake/.github/actions/install@v1
 
       - name: Bootstrap Go (arm64, >= 1.24)
         uses: actions/setup-go@v7
