@@ -28,8 +28,9 @@ GitHub Releases. Ships as `golang-<gover>-native-mavericks.<rev>.pkg` and
   `N=maxN+1`/`RELEASE=yes`. `VERSION` (the full string) is workflow-written and **gitignored** —
   never committed.
 - Renovate auto-bumps `UPSTREAM_VERSION` for upstream Go **patch** releases and automerges the PR
-  (`.github/renovate.json` customManager + `packageRules`, `ignoreTests: false` so automerge waits
-  for a green build); minor/major Go bumps land as normal, non-automerged PRs for manual review.
+  (`.github/renovate.json` customManager + `packageRules`); automerge waits for a green build because
+  the **shared preset** sets `ignoreTests: false` — don't restate it here, or this repo silently stops
+  tracking the preset. Minor/major Go bumps land as normal, non-automerged PRs for manual review.
 - A push to `main` whose upstream has no release yet auto-cuts `<upstream>-mavericks.1` via
   `gh release create` in `release.yml` (no PAT — `gh` mints the tag itself). Don't also push a
   manual tag for that release; that re-triggers CI and rebuilds/republishes the same version.

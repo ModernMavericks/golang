@@ -82,15 +82,17 @@ jobs:
       - name: Trust-model unit tests
         run: GOROOT_BOOTSTRAP="$(go env GOROOT)" sh tests/trust/unit-trust.sh
 
-      - name: Unit tests (release tooling)
-        run: |
-          sh tests/go-src-sha256-test.sh
-          sh tests/version-test.sh
-          sh tests/release-notes-file-test.sh
-          # The pin list the notes describe is derived from the repackage caller's own paths; fail if
-          # that declaration resolves to nothing (a typo'd glob means no repackage AND no notes).
-          SCR="$(cat "$HOME/.cmake/packages/MavericksSharedCMake/"* | head -1)/scripts"
-          sh "$SCR/check-ingredient-pins.sh"
+      # The shared runner takes the whole top-level suite, so a newly added test runs the day it lands
+      # instead of when someone remembers a CI line. Tests needing a built toolchain (compat-guard) or
+      # a real 10.9 box (smoke-mavericks) exit 77 and report SKIP here; the compat guard's real gate is
+      # its explicit post-build invocation below, which passes the shipped binaries.
+      - name: Run the repo's tests
+        run: sh "$MSC_SCRIPTS/run-repo-tests.sh"
+
+      # The pin list the notes describe is derived from the repackage caller's own paths; fail if
+      # that declaration resolves to nothing (a typo'd glob means no repackage AND no notes).
+      - name: Guard the ingredient pin declaration
+        run: sh "$MSC_SCRIPTS/check-ingredient-pins.sh"
 
       - name: Cross-build the native toolchain (Rosetta-free)
         run: sh build/build-native.sh
@@ -141,9 +143,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}   # sign_and_appcast.sh fetches ed25519-sign via `gh` -> needs auth (else 403 rate-limit)
         run: |
           [ -n "$SPARKLE_PRIVATE_KEY" ] || { echo "::error::SPARKLE_PRIVATE_KEY secret not set"; exit 1; }
-          # Resolve the installed shared-cmake scripts dir via the CMake user package registry.
-          SH="$(cat "$HOME/.cmake/packages/MavericksSharedCMake/"* | head -1)/scripts"
-          [ -d "$SH" ] || { echo "::error::shared-cmake scripts not found at $SH"; exit 1; }
+          SH="$MSC_SCRIPTS"   # exported by install@v1; don't re-derive it from the registry
+          [ -d "$SH" ] || { echo "::error::MSC_SCRIPTS not set by install@v1"; exit 1; }
           VER="${{ steps.ver.outputs.full }}"; TAG="${{ steps.ver.outputs.tag }}"
           NOTES="$(sh build/release-notes-file.sh "$TAG" "$VER")"
           OUT="$HOME/.cache/mavericks-golang/work/out"

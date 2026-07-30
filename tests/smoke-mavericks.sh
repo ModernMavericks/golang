@@ -2,7 +2,10 @@
 set -eu
 here="$(cd "$(dirname "$0")" && pwd)"
 . "$here/../build/versions.sh"
-: "${MAVERICKS_HOST:?set MAVERICKS_HOST (passwordless ssh alias)}"
+# This is an ON-BOX smoke: it needs a real 10.9 machine reachable over passwordless ssh. Without one
+# there is nothing to smoke, so exit 77 = SKIP (the family convention) rather than fail -- a CI runner
+# was never going to have a Mavericks box.
+[ -n "${MAVERICKS_HOST:-}" ] || { echo "MAVERICKS_HOST unset (no 10.9 box) -- skipping"; exit 77; }
 MODE="${1:-staged}"   # staged | installer
 stage="$WORK/staging"
 
