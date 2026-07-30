@@ -8,9 +8,9 @@ name: release
 # Products:
 #   - native (runs on 10.9): amd64/min-10.9 toolchain + x86_64 Sparkle updater + 10.9.5 floor
 #   - cross  (runs on modern macOS, targets 10.9): native arm64 toolchain + arm64 Sparkle updater
-# Each is EdDSA-signed with its own appcast (appcast.xml / appcast-cross.xml). `gh release create`
-# mints the tag itself (no PAT). No 10.9 runner anywhere; the published artifacts are re-validated
-# on a real 10.9 box out-of-band.
+# Each is EdDSA-signed with its own appcast (appcast.xml / appcast-cross.xml). Publishing is the
+# shared publish-release.yml, which mints the tag itself (no PAT) and refuses an empty Release body.
+# No 10.9 runner anywhere; the published artifacts are re-validated on a real 10.9 box out-of-band.
 
 on:
   push:
@@ -36,6 +36,9 @@ concurrency:
 jobs:
   build:
     runs-on: macos-26   # Apple Silicon (arm64) — mirrors local Tahoe; use macos-15 if 26 is unavailable
+    outputs:
+      version: ${{ steps.ver.outputs.full }}
+      publish: ${{ steps.ver.outputs.release }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -171,28 +174,25 @@ jobs:
           mkdir -p dist
           cp "$OUT"/*.pkg dist/                            # both products' installers (GHA installs via installer -pkg)
           for f in appcast.xml appcast-cross.xml; do [ -f "$OUT/$f" ] && cp "$OUT/$f" dist/ || true; done
-          ( cd dist && shasum -a 256 *.pkg > SHA256SUMS )
+          # The body travels IN the artifact: publish-release.yml does not check out the repo. Same
+          # generated file the appcasts used, so the Release page and Sparkle tell one story and both
+          # name which build ingredients changed. No SHA256SUMS here -- the workflow regenerates it
+          # over everything it attaches.
+          NOTES="$(sh build/release-notes-file.sh "${{ steps.ver.outputs.tag }}" "${{ steps.ver.outputs.full }}" || true)"
+          if [ -n "$NOTES" ] && [ -s "$NOTES" ]; then cp "$NOTES" dist/RELEASE_NOTES.md
+          else printf '## %s\n\nAutomated release.\n' "${{ steps.ver.outputs.full }}" > dist/RELEASE_NOTES.md; fi
 
       - uses: actions/upload-artifact@v7
         with:
           name: golang-go126
           path: dist/*
 
-      - name: Publish GitHub Release
-        if: steps.ver.outputs.release == 'yes'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          TAG="${{ steps.ver.outputs.tag }}"
-          VER="${{ steps.ver.outputs.full }}"
-          # The SAME generated file the appcast used, so the Release body and Sparkle tell one story
-          # and both name which build ingredients changed. Regenerating is cheap and deterministic;
-          # it is a temp file, so it never lands in dist/ (which is published as release assets).
-          NOTES="$(sh build/release-notes-file.sh "$TAG" "$VER" || true)"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/* --clobber
-          elif [ -n "$NOTES" ] && [ -s "$NOTES" ]; then
-            gh release create "$TAG" dist/* --title "$TAG" --notes-file "$NOTES"
-          else
-            gh release create "$TAG" dist/* --title "$TAG" --generate-notes
-          fi
+  publish:
+    if: needs.build.outputs.publish == 'yes'
+    needs: [build]
+    permissions:
+      contents: write
+    uses: ModernMavericks/shared-cmake/.github/workflows/publish-release.yml@v1
+    with:
+      version: ${{ needs.build.outputs.version }}
+      artifact: golang-go126
