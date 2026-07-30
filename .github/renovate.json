@@ -1,25 +1,19 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["github>ModernMavericks/shared-cmake"],
+  "extends": [
+    "github>ModernMavericks/shared-cmake"
+  ],
   "customManagers": [
     {
       "customType": "regex",
-      "managerFilePatterns": ["/^UPSTREAM_VERSION$/"],
-      "matchStrings": ["^(?<currentValue>.+?)\\s*$"],
+      "managerFilePatterns": [
+        "/^UPSTREAM_VERSION$/"
+      ],
+      "matchStrings": [
+        "^(?<currentValue>.+?)\\s*$"
+      ],
       "depNameTemplate": "go",
       "datasourceTemplate": "golang-version"
-    }
-  ],
-  "packageRules": [
-    {
-      "matchDepNames": ["go"],
-      "matchUpdateTypes": ["patch"],
-      "automerge": true
-    },
-    {
-      "matchDepNames": ["go"],
-      "matchUpdateTypes": ["minor", "major"],
-      "automerge": false
     }
   ]
 }
