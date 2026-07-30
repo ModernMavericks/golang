@@ -83,7 +83,14 @@ jobs:
         run: GOROOT_BOOTSTRAP="$(go env GOROOT)" sh tests/trust/unit-trust.sh
 
       - name: Unit tests (release tooling)
-        run: sh tests/go-src-sha256-test.sh && sh tests/version-test.sh && sh tests/release-notes-file-test.sh
+        run: |
+          sh tests/go-src-sha256-test.sh
+          sh tests/version-test.sh
+          sh tests/release-notes-file-test.sh
+          # The pin list the notes describe is derived from the repackage caller's own paths; fail if
+          # that declaration resolves to nothing (a typo'd glob means no repackage AND no notes).
+          SCR="$(cat "$HOME/.cmake/packages/MavericksSharedCMake/"* | head -1)/scripts"
+          sh "$SCR/check-ingredient-pins.sh"
 
       - name: Cross-build the native toolchain (Rosetta-free)
         run: sh build/build-native.sh
@@ -176,10 +183,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${{ steps.ver.outputs.tag }}"
-          NOTES="release-notes/${TAG}.md"
+          VER="${{ steps.ver.outputs.full }}"
+          # The SAME generated file the appcast used, so the Release body and Sparkle tell one story
+          # and both name which build ingredients changed. Regenerating is cheap and deterministic;
+          # it is a temp file, so it never lands in dist/ (which is published as release assets).
+          NOTES="$(sh build/release-notes-file.sh "$TAG" "$VER" || true)"
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" dist/* --clobber
-          elif [ -f "$NOTES" ]; then
+          elif [ -n "$NOTES" ] && [ -s "$NOTES" ]; then
             gh release create "$TAG" dist/* --title "$TAG" --notes-file "$NOTES"
           else
             gh release create "$TAG" dist/* --title "$TAG" --generate-notes
