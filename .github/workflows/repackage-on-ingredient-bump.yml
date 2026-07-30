@@ -8,7 +8,9 @@ name: repackage-on-ingredient-bump
 on:
   push:
     branches: [main]
-    paths: ['build/versions.sh']
+    paths:
+      - build/versions.sh    # the legacysupport shim pin, the CA bundle's hash pin
+      - vendor/cacert.pem    # the vendored CA bundle itself (refreshed by hand; see INGREDIENTS.md)
 
 jobs:
   repackage:
