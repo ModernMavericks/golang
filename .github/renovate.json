@@ -6,14 +6,25 @@
   "customManagers": [
     {
       "customType": "regex",
+      "description": "Track Go for the 126 LINE. Each line is a separate product with its own UPSTREAM_VERSION and its own cap, so a line never jumps minor: 1.27 arrives as a new lines/127/ with its own manager, not by moving this one.",
       "managerFilePatterns": [
-        "/^UPSTREAM_VERSION$/"
+        "/^lines/126/UPSTREAM_VERSION$/"
       ],
       "matchStrings": [
         "^(?<currentValue>.+?)\\s*$"
       ],
-      "depNameTemplate": "go",
+      "depNameTemplate": "go-126",
+      "packageNameTemplate": "go",
       "datasourceTemplate": "golang-version"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "The 126 line stays on 1.26.x. Not an automerge exception -- automerge is the family default (ship-if-green) and still applies; this only stops Renovate from walking the line onto a Go minor it was never built for.",
+      "matchDepNames": [
+        "go-126"
+      ],
+      "allowedVersions": "<1.27"
     }
   ]
 }

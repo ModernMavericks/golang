@@ -34,11 +34,64 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
-    runs-on: macos-26   # Apple Silicon (arm64) — mirrors local Tahoe; use macos-15 if 26 is unavailable
+  # A Go MINOR LINE is a product: lines/126 (and a future lines/127) build, publish and update
+  # independently. Decide the whole release plan ONCE here -- per line, what version and whether it
+  # publishes -- because a matrix job's outputs are last-writer-wins and GitHub does not expose the
+  # matrix context to a job-level `if`. Downstream jobs read the plan instead of recomputing it.
+  plan:
+    runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.ver.outputs.full }}
-      publish: ${{ steps.ver.outputs.release }}
+      lines: ${{ steps.p.outputs.lines }}
+      publish_lines: ${{ steps.p.outputs.publish_lines }}
+      any_publish: ${{ steps.p.outputs.any_publish }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # build/version.sh counts existing <upstream>-mavericks.* tags
+      - name: Install mavericks-shared-cmake
+        uses: ModernMavericks/shared-cmake/.github/actions/install@v1
+      - name: Decide the release plan, per line
+        id: p
+        run: |
+          set -eu
+          mode=auto
+          if [ "${{ github.event_name }}" = workflow_dispatch ] && [ "${{ inputs.local_release }}" = "true" ]; then
+            mode=local
+          fi
+          all=''; pub=''
+          for d in lines/*/; do
+            line="$(basename "$d")"
+            if [ "$GITHUB_REF_TYPE" = tag ]; then
+              # A tag names exactly one line's release; the others just build.
+              up="$(tr -d '[:space:]' < "$d/UPSTREAM_VERSION")"
+              case "$GITHUB_REF_NAME" in
+                "$up"-mavericks.*) full="$GITHUB_REF_NAME"; rel=yes ;;
+                *) full="$(GO_LINE=$line sh build/version.sh auto | sed -n 's/^FULL=//p')"; rel=no ;;
+              esac
+            else
+              out="$(GO_LINE=$line sh build/version.sh "$mode")"
+              full="$(printf '%s\n' "$out" | sed -n 's/^FULL=//p')"
+              rel="$(printf '%s\n' "$out" | sed -n 's/^RELEASE=//p')"
+              # only main cuts releases; PRs and other branches never publish
+              [ "$GITHUB_REF_NAME" = main ] || rel=no
+            fi
+            item="{\"line\":\"$line\",\"version\":\"$full\"}"
+            all="$all$item,"
+            [ "$rel" = yes ] && pub="$pub$item,"
+            echo "line $line -> $full (publish=$rel)"
+          done
+          printf 'lines={"include":[%s]}\n' "${all%,}" >> "$GITHUB_OUTPUT"
+          printf 'publish_lines={"include":[%s]}\n' "${pub%,}" >> "$GITHUB_OUTPUT"
+          if [ -n "$pub" ]; then echo "any_publish=true" >> "$GITHUB_OUTPUT"; else echo "any_publish=false" >> "$GITHUB_OUTPUT"; fi
+
+  build:
+    needs: plan
+    strategy:
+      fail-fast: false      # one line's breakage must not cancel another's build
+      matrix: ${{ fromJSON(needs.plan.outputs.lines) }}
+    env:
+      GO_LINE: ${{ matrix.line }}
+    runs-on: macos-26   # Apple Silicon (arm64) — mirrors local Tahoe; use macos-15 if 26 is unavailable
     steps:
       - uses: actions/checkout@v7
         with:
@@ -51,29 +104,17 @@ jobs:
         # config auto-scaffolds our .github/renovate.json. Consumed via find_package + versions.sh's MSC_SCRIPTS.
         uses: ModernMavericks/shared-cmake/.github/actions/install@v1
 
-      - name: Compute version
+      # The plan job already decided this line's version; take it rather than recomputing, so every
+      # job in the run agrees about what is being built. VERSION is written locally (never committed)
+      # because the cmake configure and the updater bundle read it.
+      - name: Take this line's version from the plan
         id: ver
         run: |
           set -eu
-          if [ "$GITHUB_REF_TYPE" = tag ]; then
-            full="$GITHUB_REF_NAME"; tag="$GITHUB_REF_NAME"; rel=yes
-          else
-            mode=auto
-            if [ "${{ github.event_name }}" = workflow_dispatch ] && [ "${{ inputs.local_release }}" = "true" ]; then
-              mode=local
-            fi
-            out="$(sh build/version.sh "$mode")"
-            full="$(printf '%s\n' "$out" | sed -n 's/^FULL=//p')"
-            tag="$(printf '%s\n'  "$out" | sed -n 's/^TAG=//p')"
-            rel="$(printf '%s\n'  "$out" | sed -n 's/^RELEASE=//p')"
-            # only main (push or workflow_dispatch) cuts releases; PRs and non-main branches never publish
-            if [ "$GITHUB_REF_NAME" != main ]; then
-              rel=no
-            fi
-          fi
+          full="${{ matrix.version }}"
           printf '%s\n' "$full" > VERSION
-          { echo "full=$full"; echo "tag=$tag"; echo "release=$rel"; } >> "$GITHUB_OUTPUT"
-          echo "version=$full tag=$tag release=$rel"
+          { echo "full=$full"; echo "tag=$full"; } >> "$GITHUB_OUTPUT"
+          echo "line=$GO_LINE version=$full"
 
       - name: Bootstrap Go (arm64, >= 1.24)
         uses: actions/setup-go@v7
@@ -140,7 +181,7 @@ jobs:
         run: UPD_APP="build/updater-cross/GoCrossUpdater.app" sh build/package-cross-pkg.sh
 
       - name: EdDSA-sign both .pkgs + generate both Sparkle appcasts
-        if: steps.ver.outputs.release == 'yes'
+        if: contains(needs.plan.outputs.publish_lines, format('"line":"{0}"', matrix.line))
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
           GH_TOKEN: ${{ github.token }}   # sign_and_appcast.sh fetches ed25519-sign via `gh` -> needs auth (else 403 rate-limit)
@@ -184,15 +225,53 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: golang-go126
+          name: golang-go${{ matrix.line }}
           path: dist/*
 
   publish:
-    if: needs.build.outputs.publish == 'yes'
-    needs: [build]
+    needs: [plan, build]
+    if: needs.plan.outputs.any_publish == 'true'
+    strategy:
+      max-parallel: 1       # one line at a time: each publish mints a tag
+      matrix: ${{ fromJSON(needs.plan.outputs.publish_lines) }}
     permissions:
       contents: write
     uses: ModernMavericks/shared-cmake/.github/workflows/publish-release.yml@v1
     with:
-      version: ${{ needs.build.outputs.version }}
-      artifact: golang-go126
+      version: ${{ matrix.version }}
+      artifact: golang-go${{ matrix.line }}
+
+  # The per-line UPDATE FEED. Sparkle installs poll a fixed URL, so it cannot be the repo's /latest/
+  # release -- that follows whichever LINE published most recently, which would offer a 1.26 user a
+  # 1.27 upgrade unasked and, once 1.26.7 ships after 1.27.0, leave 1.27 users seeing nothing at all.
+  # Instead each line owns a `feed-<line>` release whose appcast assets are replaced on every publish
+  # in that line. It is a prerelease so it stays out of the way of the real releases.
+  feed:
+    needs: [plan, publish]
+    if: needs.plan.outputs.any_publish == 'true'
+    strategy:
+      max-parallel: 1
+      matrix: ${{ fromJSON(needs.plan.outputs.publish_lines) }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: golang-go${{ matrix.line }}
+          path: dist
+      - name: Point feed-${{ matrix.line }} at ${{ matrix.version }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LINE: ${{ matrix.line }}
+          VER: ${{ matrix.version }}
+        run: |
+          set -eu
+          ls dist/appcast.xml dist/appcast-cross.xml >/dev/null   # a feed with no appcast is a broken product
+          if ! gh release view "feed-$LINE" >/dev/null 2>&1; then
+            gh release create "feed-$LINE" --prerelease \
+              --title "go$LINE update feed" \
+              --notes "Sparkle appcast for the go$LINE line. Its assets are replaced on every go$LINE release; the tag itself never moves, which is the point -- installed updaters poll this URL and must never be handed another line's release."
+          fi
+          gh release upload "feed-$LINE" dist/appcast.xml dist/appcast-cross.xml --clobber
+          echo "feed-$LINE now serves $VER"

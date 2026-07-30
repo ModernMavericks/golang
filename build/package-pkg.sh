@@ -23,7 +23,7 @@ if [ -d "$UPD_APP" ]; then
     --stage "$stage" \
     --app "$UPD_APP" \
     --app-dir "/Library/Application Support/ModernMavericks" \
-    --agent-label dev.modernmavericks.golang.go126-updatecheck \
+    --agent-label "dev.modernmavericks.golang.go${GO_LINE}-updatecheck" \
     --scripts-out "$scr"
   set -- --scripts "$scr"
 else
@@ -38,16 +38,16 @@ cp "$REPO_ROOT/scripts/resources/Welcome.html" "$RES/"
 # Flat component pkg over the whole payload (/usr/local/... + /Library/LaunchAgents),
 # with the postinstall that loads the update-check agent.
 find "$stage" -name '._*' -delete 2>/dev/null || true   # strip AppleDouble cruft
-comp="$out/golang-go126-component.pkg"
-pkgbuild --root "$stage" --identifier dev.modernmavericks.golang.go126 --version "$PKG_VERSION" \
+comp="$out/golang-go${GO_LINE}-component.pkg"
+pkgbuild --root "$stage" --identifier "dev.modernmavericks.golang.go${GO_LINE}" --version "$PKG_VERSION" \
          "$@" --install-location / "$comp"
 
 # Product archive with the 10.9.5 OS floor (shared helper, from the installed prefix).
 HELPER="$MSC_SCRIPTS/set_install_floor.sh"
 lic=""; [ -f "$RES/LICENSE.txt" ] && lic="--license LICENSE.txt"
 sh "$HELPER" \
-  --identifier dev.modernmavericks.golang.go126 \
-  --title "go126 — modern Go 1.26 for OS X 10.9" \
+  --identifier "dev.modernmavericks.golang.go${GO_LINE}" \
+  --title "go${GO_LINE} — modern Go ${GO_VERSION%.*} for OS X 10.9" \
   --component "$comp" --out "$pkg" \
   --resources "$RES" --welcome Welcome.html $lic --host-arch x86_64
 rm -f "$comp"   # intermediate: only the floored product archive ships

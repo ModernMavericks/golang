@@ -21,13 +21,27 @@ GitHub Releases. Ships as `golang-<gover>-native-mavericks.<rev>.pkg` and
 - `.github/workflows/release.yml` — CI build → EdDSA-sign → appcast → Release. Three triggers: push
   to `main` (auto-cuts `<upstream>-mavericks.1` if unreleased), a `*-mavericks.*` tag, or
   `workflow_dispatch local_release=true`.
-- Upstream Go version lives in `UPSTREAM_VERSION` (bare `x.y.z`, Renovate-managed). `build/version.sh
+- **A Go minor LINE is a product.** `lines/126/` holds that line's `UPSTREAM_VERSION` and `patches/`;
+  everything else derives from it (`/usr/local/go126`, `dev.modernmavericks.golang.go126`, the
+  LaunchAgent label, the product title, and the Sparkle feed `feed-126`). go126 and a future go127
+  install side by side, and an installed updater **never crosses lines** — a 1.26 user is not carried
+  onto 1.27 unasked, and a 1.26.7 published after 1.27.0 disturbs nothing.
+  - **Adding a line touches three files:** `lines/<n>/UPSTREAM_VERSION`, a capped Renovate manager in
+    `.github/renovate.json`, and `own-upstream-paths` in the repackage caller. Patches are optional —
+    with none, `apply-patches.sh` falls back to the newest lower line and applies with fuzz
+    (`patch -p0 -F 3`), so a new Go minor gets a real chance to just work. If it does and the gates
+    pass, ship-if-green ships it; if not, write `lines/<n>/patches/`.
+  - The gates are what make that safe, not the fuzz: patches 0005–0010 are the keychain-union trust
+    model in `src/crypto/x509`, exactly where Go churns between minors. A fuzzy apply can succeed and
+    be wrong — that is what `tests/trust/` and the compat guard are for. **Never relax those to make a
+    new line green.**
+- Upstream Go version lives in `lines/<line>/UPSTREAM_VERSION` (bare `x.y.z`, Renovate-managed). `build/version.sh
   <auto|local>` derives the full `<upstream>-mavericks.N` + a `RELEASE=yes/no` decision from
   existing `*-mavericks.*` tags: `auto` is `N=1`/`RELEASE=yes` for a new upstream (no tag yet),
   else current `N`/`RELEASE=no`; `local` (via `workflow_dispatch local_release`) is always
   `N=maxN+1`/`RELEASE=yes`. `VERSION` (the full string) is workflow-written and **gitignored** —
   never committed.
-- Renovate auto-bumps `UPSTREAM_VERSION` and automerges the PR **once the build is green** — patch,
+- Renovate auto-bumps each line's `UPSTREAM_VERSION` (capped to its own minor) and automerges the PR **once the build is green** — patch,
   minor and major alike, per the family's ship-if-green policy. This repo needs no `packageRules`:
   a Go minor bump hits `build/apply-patches.sh`, which hardcodes `patches/126/`, so the patches fail
   to apply and the PR never merges. The build is the gate; `ignoreTests: false` comes from the

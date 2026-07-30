@@ -9,7 +9,12 @@ if printf '%s\n' $tracked | xargs grep -l '/usr/local/mavericks-go' 2>/dev/null 
 fi
 # the otool self-link check must reference the new path, not the old bare fragment
 grep -q "mavericks-go/go126" .github/workflows/release.yml && { echo "FAIL: bare 'mavericks-go/go126' fragment remains in release.yml"; exit 1; }
-# sanity: versions.sh has the new prefixes
-grep -q '^export PREFIX="/usr/local/go126"' build/versions.sh || { echo "FAIL: PREFIX not flattened"; exit 1; }
-grep -q '^export CROSS_PREFIX="/usr/local/go126-cross"' build/versions.sh || { echo "FAIL: CROSS_PREFIX not flattened"; exit 1; }
+# Sanity: the prefixes RESOLVE flat. Assert the value, not the spelling -- they are derived from the
+# Go line now (/usr/local/go${GO_LINE}), so grepping the source text would only pin the syntax and
+# would break the day a second line arrives.
+eval_prefix() { REPO_ROOT="$(pwd)" sh -c ". ./build/versions.sh; printf '%s\n' \"\$$1\"" 2>/dev/null; }
+[ "$(eval_prefix PREFIX)" = /usr/local/go126 ] \
+  || { echo "FAIL: PREFIX is '$(eval_prefix PREFIX)', expected the flat /usr/local/go126"; exit 1; }
+[ "$(eval_prefix CROSS_PREFIX)" = /usr/local/go126-cross ] \
+  || { echo "FAIL: CROSS_PREFIX is '$(eval_prefix CROSS_PREFIX)', expected /usr/local/go126-cross"; exit 1; }
 echo "prefix-check OK"

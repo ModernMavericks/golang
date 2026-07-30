@@ -21,7 +21,17 @@ export WORK="${MAVERICKS_WORK:-$HOME/.cache/mavericks-golang/work}"
 # writes and .gitignore excludes; before a release is cut (local/CI build) fall back to
 # the computed auto version so a build never depends on a committed VERSION file.
 . "$REPO_ROOT/build/lib.sh"
+# A Go MINOR LINE is a product: go126 and a future go127 install side by side, each with its own
+# prefix, identifier, updater and feed, so a 1.26 user is never carried onto 1.27 unasked. Everything
+# below derives from the line -- adding one is a new lines/<line>/UPSTREAM_VERSION, nothing else.
+export GO_LINE="${GO_LINE:-126}"
+export MAVERICKS_UPSTREAM_FILE="$REPO_ROOT/lines/$GO_LINE/UPSTREAM_VERSION"
 export GO_VERSION="$(upstream_version)"
+# The line must match the upstream it points at, or every derived name is a lie.
+case "$GO_VERSION" in
+  "$(printf '%s' "$GO_LINE" | sed 's/^\(.\)\(.*\)$/\1.\2/')".*) : ;;
+  *) echo "versions.sh: lines/$GO_LINE holds Go $GO_VERSION -- line and upstream disagree" >&2; exit 1 ;;
+esac
 if [ -f "$REPO_ROOT/VERSION" ]; then
   export PKG_VERSION="$(cat "$REPO_ROOT/VERSION")"
 else
@@ -35,14 +45,14 @@ export GO_SRC_URL="https://go.dev/dl/go${GO_VERSION}.src.tar.gz"
 # shared preset's `# mavericks-legacysupport` customManager (unquoted, marker on the line).
 export MLS_VERSION=1.5.2-mavericks.2   # mavericks-legacysupport
 
-export PREFIX="/usr/local/go126"
+export PREFIX="/usr/local/go${GO_LINE}"
 export MACOS_MIN="10.9"
 
 # Both products bake the SAME CA convention path into the std trust model: the
 # NATIVE prefix's bundle dir. Native populates it; cross-built apps look there
 # (a box with the native .pkg installed, or an app that drops/embeds its CA).
-export NATIVE_PREFIX="/usr/local/go126"
-export CROSS_PREFIX="/usr/local/go126-cross"
+export NATIVE_PREFIX="/usr/local/go${GO_LINE}"
+export CROSS_PREFIX="/usr/local/go${GO_LINE}-cross"
 export CA_DIR="$NATIVE_PREFIX/etc/openssl"   # @SSLDIR@ substitution target (native == cross)
 
 export WLU_SYMS="_SecTrustEvaluateWithError _SecTrustCopyCertificateChain _notify_is_valid_token _xpc_date_create_from_current"

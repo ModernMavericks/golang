@@ -24,21 +24,33 @@ include(MavericksSparkle)   # the Sparkle updater .app builder
 
 file(STRINGS "${CMAKE_SOURCE_DIR}/VERSION" MAVGO_VERSION LIMIT_COUNT 1)
 
+# A Go MINOR LINE is a product: go126 and a future go127 install side by side, each with its own
+# prefix, identifiers and UPDATE FEED. Deriving the line from the version keeps the updater's feed,
+# the paths it names, and the product title honest when a new line appears.
+string(REGEX REPLACE "^([0-9]+)\\.([0-9]+)\\..*$" "\\1\\2" MAVGO_LINE "${MAVGO_VERSION}")
+string(REGEX REPLACE "^([0-9]+)\\.([0-9]+)\\..*$" "\\1.\\2" MAVGO_MINOR "${MAVGO_VERSION}")
+if(NOT MAVGO_LINE MATCHES "^[0-9]+$")
+  message(FATAL_ERROR "cannot derive the Go line from VERSION '${MAVGO_VERSION}'")
+endif()
+
 if(MAVGO_VARIANT STREQUAL "native")
   set(_name       GoUpdater)
-  set(_product    "Mavericks Go 1.26")
+  set(_product    "Mavericks Go ${MAVGO_MINOR}")
   set(_bundle     dev.modernmavericks.GoUpdater)
-  set(_feed       "https://github.com/ModernMavericks/golang/releases/latest/download/appcast.xml")
+  # Per-LINE feed, not /latest/: the repo's latest release may belong to another line, which would
+  # offer a 1.26 user a 1.27 upgrade unasked -- and, once 1.26.7 ships after 1.27.0, would leave
+  # 1.27 users seeing nothing at all (Sparkle never offers a lower version, so it stalls).
+  set(_feed       "https://github.com/ModernMavericks/golang/releases/download/feed-${MAVGO_LINE}/appcast.xml")
   set(_logprefix  "MavGoUpdater")
-  set(_confirmbody "The Go toolchain in /usr/local/go126 was updated.")
+  set(_confirmbody "The Go toolchain in /usr/local/go${MAVGO_LINE} was updated.")
   set(_relaunch   "/tmp/.mavericks-go-updater-relaunched")
 else()
   set(_name       GoCrossUpdater)
-  set(_product    "Mavericks Go 1.26 (cross)")
+  set(_product    "Mavericks Go ${MAVGO_MINOR} (cross)")
   set(_bundle     dev.modernmavericks.GoCrossUpdater)
-  set(_feed       "https://github.com/ModernMavericks/golang/releases/latest/download/appcast-cross.xml")
+  set(_feed       "https://github.com/ModernMavericks/golang/releases/download/feed-${MAVGO_LINE}/appcast-cross.xml")
   set(_logprefix  "MavGoCrossUpdater")
-  set(_confirmbody "The cross toolchain in /usr/local/go126-cross was updated.")
+  set(_confirmbody "The cross toolchain in /usr/local/go${MAVGO_LINE}-cross was updated.")
   set(_relaunch   "/tmp/.mavericks-go-cross-updater-relaunched")
 endif()
 

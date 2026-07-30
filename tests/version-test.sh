@@ -4,7 +4,9 @@
 set -eu
 here="$(cd "$(dirname "$0")" && pwd)"
 script="$here/../build/version.sh"
-U="$(tr -d '[:space:]' < "$here/../UPSTREAM_VERSION")"
+# Per-line upstream: a Go minor line is a product here (lines/126, lines/127, ...).
+GO_LINE="${GO_LINE:-126}"
+U="$(tr -d '[:space:]' < "$here/../lines/$GO_LINE/UPSTREAM_VERSION")"
 
 # auto, no existing tags -> N=1, RELEASE=yes
 out="$(MAVERICKS_TAGS='' sh "$script" auto)"

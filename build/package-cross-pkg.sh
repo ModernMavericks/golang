@@ -22,7 +22,7 @@ if [ -d "$UPD_APP" ]; then
     --stage "$stage" \
     --app "$UPD_APP" \
     --app-dir "/Library/Application Support/ModernMavericks" \
-    --agent-label dev.modernmavericks.golang.go126-cross-updatecheck \
+    --agent-label "dev.modernmavericks.golang.go${GO_LINE}-cross-updatecheck" \
     --scripts-out "$scr"
   set -- --scripts "$scr"
 else
@@ -32,7 +32,7 @@ fi
 find "$stage" -name '._*' -delete 2>/dev/null || true
 
 # Plain product pkg -- NO 10.9.5 floor (this installs on modern macOS, arm64 host).
-pkgbuild --root "$stage" --identifier dev.modernmavericks.golang.go126-cross --version "$PKG_VERSION" \
+pkgbuild --root "$stage" --identifier "dev.modernmavericks.golang.go${GO_LINE}-cross" --version "$PKG_VERSION" \
          "$@" --install-location / "$pkg"
 # Provenance: input pins in build/versions.sh, output hash in the release's SHA256SUMS.
 echo "$pkg"
