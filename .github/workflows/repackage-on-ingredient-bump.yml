@@ -1,0 +1,19 @@
+name: repackage-on-ingredient-bump
+
+# When a build ingredient in versions.sh (the legacysupport shim, the CA bundle) is bumped by Renovate,
+# dispatch a -mavericks.(N+1) repackage via the shared reusable workflow — release.yml's workflow_dispatch
+# local_release path cuts+publishes inline. The Go version (own upstream, UPSTREAM_VERSION) stays the N=1
+# path handled by release.yml on push-to-main, so it's excluded here.
+
+on:
+  push:
+    branches: [main]
+    paths: ['build/versions.sh']
+
+jobs:
+  repackage:
+    permissions:
+      actions: write
+    uses: ModernMavericks/shared-cmake/.github/workflows/repackage-on-ingredient-bump.yml@v1
+    with:
+      own-upstream-paths: UPSTREAM_VERSION
