@@ -223,6 +223,17 @@ jobs:
           if [ -n "$NOTES" ] && [ -s "$NOTES" ]; then cp "$NOTES" dist/RELEASE_NOTES.md
           else printf '## %s\n\nAutomated release.\n' "${{ steps.ver.outputs.full }}" > dist/RELEASE_NOTES.md; fi
 
+      # Conformance: do the artifacts we are about to publish agree with each other and with the
+      # family? Every piece is checked somewhere already -- the compat guard reads binaries,
+      # set_install_floor stamps a floor, sign_and_appcast signs -- but nothing asserted they agree.
+      # Gated like the signing step: a non-publishing build has no appcast, and this is a question
+      # about a release, not about a build.
+      - name: Artifact conformance
+        if: contains(needs.plan.outputs.publish_lines, format('"line":"{0}"', matrix.line))
+        run: |
+          sh "$MSC_SCRIPTS/artifact-facts.sh" dist "${{ matrix.version }}" \
+            | sh "$MSC_SCRIPTS/check-artifact-conformance.sh"
+
       - uses: actions/upload-artifact@v7
         with:
           name: golang-go${{ matrix.line }}
