@@ -54,3 +54,11 @@ rm -f "$comp"   # intermediate: only the floored product archive ships
 # Provenance lives in versioned form: input pins in build/versions.sh, output hash in the
 # release's SHA256SUMS. No separate manifest or tarball artifact.
 echo "$pkg"
+
+# Record what this variant was built FROM. The artifacts cannot say: this .pkg carries the CA bundle
+# and the shim, the cross one legitimately does not, so "both were built from the same shim" is a
+# claim about inputs that only the build knows. Conformance compares the two records.
+sh "$MSC_SCRIPTS/build-info.sh" "$out/build-info-native.txt" \
+  variant=native arch=x86_64 prefix="$PREFIX" \
+  go_version="$GO_VERSION" go_line="$GO_LINE" \
+  mls_version="$MLS_VERSION" ca_sha256="$CA_SHA256"

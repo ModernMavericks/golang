@@ -36,3 +36,10 @@ pkgbuild --root "$stage" --identifier "dev.modernmavericks.golang.go${GO_LINE}-c
          "$@" --install-location / "$pkg"
 # Provenance: input pins in build/versions.sh, output hash in the release's SHA256SUMS.
 echo "$pkg"
+
+# Same record for the cross variant; conformance fails the release if the two disagree about an
+# ingredient (see check-artifact-conformance.sh).
+sh "$MSC_SCRIPTS/build-info.sh" "$out/build-info-cross.txt" \
+  variant=cross arch=arm64 prefix="$CROSS_PREFIX" \
+  go_version="$GO_VERSION" go_line="$GO_LINE" \
+  mls_version="$MLS_VERSION" ca_sha256="$CA_SHA256"
