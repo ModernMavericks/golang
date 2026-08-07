@@ -18,7 +18,7 @@ endif()
 
 project(GoUpdater LANGUAGES OBJC)
 
-find_package(MavericksSharedCMake REQUIRED)
+find_package(MavericksShipyard REQUIRED)
 include(Mavericks)          # universal umbrella: AppleClang gate + build conventions
 include(MavericksSparkle)   # the Sparkle updater .app builder
 

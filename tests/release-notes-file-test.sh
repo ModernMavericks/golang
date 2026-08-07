@@ -25,12 +25,12 @@ case "$p2" in */release-notes/*) echo "FAIL absent should be temp: $p2"; exit 1;
 grep -q '9.9.9' "$p2" || { echo "FAIL generated missing version"; cat "$p2"; exit 1; }
 rm -f "$p2"
 
-# The logic now lives in shared-cmake and this is a thin wrapper, so a scripts dir without it is a
+# The logic now lives in shipyard and this is a thin wrapper, so a scripts dir without it is a
 # broken environment, not a degraded one: fail loudly rather than quietly returning notes with no
 # ingredient section. (The old per-repo copy warned and carried on; a warning nobody reads is how a
 # release silently loses its section.)
 empty="$(mktemp -d)"
-if MSC_SCRIPTS="$empty" sh "$script" 9.9.9-mavericks.1 9.9.9-mavericks.1 >/dev/null 2>&1; then
+if SHIPYARD_SCRIPTS="$empty" sh "$script" 9.9.9-mavericks.1 9.9.9-mavericks.1 >/dev/null 2>&1; then
   echo "FAIL a scripts dir without release-notes-file.sh must fail, not silently degrade"; exit 1
 fi
 rm -rf "$empty"

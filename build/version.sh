@@ -1,5 +1,5 @@
 #!/bin/sh
-# Thin wrapper: the logic lives in shared-cmake (scripts/version.sh) so it cannot drift between repos.
+# Thin wrapper: the logic lives in shipyard (scripts/version.sh) so it cannot drift between repos.
 # Every call site -- tests/version-test.sh, build/versions.sh, the release workflow, and a plain
 # `sh build/version.sh auto` -- keeps working through this.
 set -eu
@@ -14,4 +14,4 @@ MAVERICKS_UPSTREAM_FILE="$MAVERICKS_ROOT/lines/$GO_LINE/UPSTREAM_VERSION"; expor
 [ -f "$MAVERICKS_UPSTREAM_FILE" ] || { echo "version.sh: no such line: lines/$GO_LINE" >&2; exit 1; }
 
 . "$SELF/msc.sh"
-exec sh "$MSC/version.sh" "$@"
+exec sh "$SHIPYARD/version.sh" "$@"

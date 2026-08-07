@@ -14,12 +14,12 @@ pkg="$out/$base.pkg"
 
 # Stage the Sparkle updater app + manual-trigger shim + daily-check LaunchAgent + the postinstall
 # that loads the agent -- all rendered by the shared helper. Skipped if the updater isn't built.
-: "${MSC_SCRIPTS:?mavericks-shared-cmake not found; install it -- see its README}"
+: "${SHIPYARD_SCRIPTS:?mavericks-shipyard not found; install it -- see its README}"
 UPD_APP="${UPD_APP:-/updater/GoUpdater.app}"
 set --                                    # pkgbuild gets --scripts only when there IS a postinstall
 if [ -d "$UPD_APP" ]; then
   scr="$out/pkg-scripts"; rm -rf "$scr"; mkdir -p "$scr"
-  sh "$MSC_SCRIPTS/stage_updater.sh" \
+  sh "$SHIPYARD_SCRIPTS/stage_updater.sh" \
     --stage "$stage" \
     --app "$UPD_APP" \
     --app-dir "/Library/Application Support/ModernMavericks" \
@@ -43,7 +43,7 @@ pkgbuild --root "$stage" --identifier "dev.modernmavericks.golang.go${GO_LINE}" 
          "$@" --install-location / "$comp"
 
 # Product archive with the 10.9.5 OS floor (shared helper, from the installed prefix).
-HELPER="$MSC_SCRIPTS/set_install_floor.sh"
+HELPER="$SHIPYARD_SCRIPTS/set_install_floor.sh"
 lic=""; [ -f "$RES/LICENSE.txt" ] && lic="--license LICENSE.txt"
 sh "$HELPER" \
   --identifier "dev.modernmavericks.golang.go${GO_LINE}" \
@@ -58,7 +58,7 @@ echo "$pkg"
 # Record what this variant was built FROM. The artifacts cannot say: this .pkg carries the CA bundle
 # and the shim, the cross one legitimately does not, so "both were built from the same shim" is a
 # claim about inputs that only the build knows. Conformance compares the two records.
-sh "$MSC_SCRIPTS/build-info.sh" "$out/build-info-native.txt" \
+sh "$SHIPYARD_SCRIPTS/build-info.sh" "$out/build-info-native.txt" \
   variant=native arch=x86_64 prefix="$PREFIX" \
   go_version="$GO_VERSION" go_line="$GO_LINE" \
   mls_version="$MLS_VERSION" ca_sha256="$CA_SHA256"

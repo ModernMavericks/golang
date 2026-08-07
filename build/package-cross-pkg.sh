@@ -13,12 +13,12 @@ pkg="$out/$base.pkg"
 
 # Stage the modern Sparkle updater + shim + LaunchAgent + postinstall via the shared helper.
 # Skipped if the cross updater isn't built.
-: "${MSC_SCRIPTS:?mavericks-shared-cmake not found; install it -- see its README}"
+: "${SHIPYARD_SCRIPTS:?mavericks-shipyard not found; install it -- see its README}"
 UPD_APP="${UPD_APP:-/updater-cross/GoCrossUpdater.app}"
 set --                                    # pkgbuild gets --scripts only when there IS a postinstall
 if [ -d "$UPD_APP" ]; then
   scr="$out/pkg-scripts-cross"; rm -rf "$scr"; mkdir -p "$scr"
-  sh "$MSC_SCRIPTS/stage_updater.sh" \
+  sh "$SHIPYARD_SCRIPTS/stage_updater.sh" \
     --stage "$stage" \
     --app "$UPD_APP" \
     --app-dir "/Library/Application Support/ModernMavericks" \
@@ -39,7 +39,7 @@ echo "$pkg"
 
 # Same record for the cross variant; conformance fails the release if the two disagree about an
 # ingredient (see check-artifact-conformance.sh).
-sh "$MSC_SCRIPTS/build-info.sh" "$out/build-info-cross.txt" \
+sh "$SHIPYARD_SCRIPTS/build-info.sh" "$out/build-info-cross.txt" \
   variant=cross arch=arm64 prefix="$CROSS_PREFIX" \
   go_version="$GO_VERSION" go_line="$GO_LINE" \
   mls_version="$MLS_VERSION" ca_sha256="$CA_SHA256"

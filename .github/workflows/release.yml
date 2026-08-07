@@ -48,8 +48,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # build/version.sh counts existing <upstream>-mavericks.* tags
-      - name: Install mavericks-shared-cmake
-        uses: ModernMavericks/shared-cmake/.github/actions/install@v1
+      - name: Install mavericks-shipyard
+        uses: ModernMavericks/shipyard/.github/actions/install@v1
       - name: Decide the release plan, per line
         id: p
         run: |
@@ -97,12 +97,12 @@ jobs:
         with:
           fetch-depth: 0   # build/version.sh counts existing <upstream>-mavericks.* tags
 
-      - name: Install mavericks-shared-cmake
-        # shared-cmake installs itself via its own action (to $HOME/.local, self-registering in the
+      - name: Install mavericks-shipyard
+        # shipyard installs itself via its own action (to $HOME/.local, self-registering in the
         # CMake user package registry). We do NOT clone/`cmake --install` it by hand. @v1 is the moving
-        # major tag; Renovate's github-actions manager tracks it (no SHA, no marker comment). shared-cmake's
-        # config auto-scaffolds our .github/renovate.json. Consumed via find_package + versions.sh's MSC_SCRIPTS.
-        uses: ModernMavericks/shared-cmake/.github/actions/install@v1
+        # major tag; Renovate's github-actions manager tracks it (no SHA, no marker comment). shipyard's
+        # config auto-scaffolds our .github/renovate.json. Consumed via find_package + versions.sh's SHIPYARD_SCRIPTS.
+        uses: ModernMavericks/shipyard/.github/actions/install@v1
 
       # The plan job already decided this line's version; take it rather than recomputing, so every
       # job in the run agrees about what is being built. VERSION is written locally (never committed)
@@ -131,12 +131,12 @@ jobs:
       # a real 10.9 box (smoke-mavericks) exit 77 and report SKIP here; the compat guard's real gate is
       # its explicit post-build invocation below, which passes the shipped binaries.
       - name: Run the repo's tests
-        run: sh "$MSC_SCRIPTS/run-repo-tests.sh"
+        run: sh "$SHIPYARD_SCRIPTS/run-repo-tests.sh"
 
       # The pin list the notes describe is derived from the repackage caller's own paths; fail if
       # that declaration resolves to nothing (a typo'd glob means no repackage AND no notes).
       - name: Guard the ingredient pin declaration
-        run: sh "$MSC_SCRIPTS/check-ingredient-pins.sh"
+        run: sh "$SHIPYARD_SCRIPTS/check-ingredient-pins.sh"
 
       - name: Cross-build the native toolchain (Rosetta-free)
         run: sh build/build-native.sh
@@ -154,7 +154,7 @@ jobs:
       - name: Build the Sparkle updater app (Cocoa/ObjC; must not link Go)
         run: |
           BUILD="build/updater"
-          # find_package resolves MavericksSharedCMake from the user package registry (installed above);
+          # find_package resolves MavericksShipyard from the user package registry (installed above);
           # no CMAKE_PREFIX_PATH, no vendored copy. The x86_64 Sparkle slice is auto-derived from the
           # native updater's CMAKE_OSX_ARCHITECTURES by mavericks_add_updater_app.
           cmake -S . -B "$BUILD" -DCMAKE_OBJC_COMPILER=/usr/bin/clang
@@ -187,8 +187,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}   # sign_and_appcast.sh fetches ed25519-sign via `gh` -> needs auth (else 403 rate-limit)
         run: |
           [ -n "$SPARKLE_PRIVATE_KEY" ] || { echo "::error::SPARKLE_PRIVATE_KEY secret not set"; exit 1; }
-          SH="$MSC_SCRIPTS"   # exported by install@v1; don't re-derive it from the registry
-          [ -d "$SH" ] || { echo "::error::MSC_SCRIPTS not set by install@v1"; exit 1; }
+          SH="$SHIPYARD_SCRIPTS"   # exported by install@v1; don't re-derive it from the registry
+          [ -d "$SH" ] || { echo "::error::SHIPYARD_SCRIPTS not set by install@v1"; exit 1; }
           VER="${{ steps.ver.outputs.full }}"; TAG="${{ steps.ver.outputs.tag }}"
           NOTES="$(sh build/release-notes-file.sh "$TAG" "$VER")"
           OUT="$HOME/.cache/mavericks-golang/work/out"
@@ -233,15 +233,15 @@ jobs:
       - name: Artifact conformance
         if: contains(needs.plan.outputs.publish_lines, format('"line":"{0}"', matrix.line))
         run: |
-          sh "$MSC_SCRIPTS/artifact-facts.sh" dist "${{ matrix.version }}" \
-            | sh "$MSC_SCRIPTS/check-artifact-conformance.sh"
+          sh "$SHIPYARD_SCRIPTS/artifact-facts.sh" dist "${{ matrix.version }}" \
+            | sh "$SHIPYARD_SCRIPTS/check-artifact-conformance.sh"
           # Behavior gate, per appcast: a client on this LINE's previous release must SEE this as an
           # upgrade -- a numeric sparkle:version ordering strictly after the last published tag IN THIS
           # LINE. Scope the tag search to the line (1.26.5-mavericks.5 -> glob 1.26.*) so 1.26.7
           # compares against 1.26.5, not a 1.27.0 shipped between. Both native + cross carry this VER.
           GLOB="$(printf '%s' "${{ matrix.version }}" | sed 's/-mavericks\..*//' | cut -d. -f1,2).*"
           for a in appcast.xml appcast-cross.xml; do
-            sh "$MSC_SCRIPTS/assert_appcast_upgradeable.sh" --appcast "dist/$a" --version "${{ matrix.version }}" --upstream-glob "$GLOB"
+            sh "$SHIPYARD_SCRIPTS/assert_appcast_upgradeable.sh" --appcast "dist/$a" --version "${{ matrix.version }}" --upstream-glob "$GLOB"
           done
 
       - uses: actions/upload-artifact@v7
@@ -257,7 +257,7 @@ jobs:
       matrix: ${{ fromJSON(needs.plan.outputs.publish_lines) }}
     permissions:
       contents: write
-    uses: ModernMavericks/shared-cmake/.github/workflows/publish-release.yml@v1
+    uses: ModernMavericks/shipyard/.github/workflows/publish-release.yml@v1
     with:
       version: ${{ matrix.version }}
       artifact: golang-go${{ matrix.line }}

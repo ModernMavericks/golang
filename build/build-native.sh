@@ -6,8 +6,8 @@ command -v go >/dev/null || { echo "FATAL: need a stock arm64 bootstrap go on PA
 GOROOT_BOOTSTRAP=$(go env GOROOT); export GOROOT_BOOTSTRAP
 
 # 1. inputs (identical to build-cross.sh: same patched source, same shim + CA).
-: "${MSC_SCRIPTS:?mavericks-shared-cmake not found; install it -- see its README}"
-SDK=$(sh "$MSC_SCRIPTS/fetch_sdk.sh"); export SDK
+: "${SHIPYARD_SCRIPTS:?mavericks-shipyard not found; install it -- see its README}"
+SDK=$(sh "$SHIPYARD_SCRIPTS/fetch_sdk.sh"); export SDK
 [ -d "$SDK" ] || { echo "FATAL: 10.9 SDK not found: '$SDK'" >&2; exit 1; }
 sh "$here/fetch-go.sh"
 sh "$here/apply-patches.sh"

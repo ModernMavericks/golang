@@ -2,12 +2,12 @@
 set -eu
 here="$(cd "$(dirname "$0")" && pwd)"
 . "$here/versions.sh"
-: "${MSC_SCRIPTS:?mavericks-shared-cmake not found; install it -- see its README}"
+: "${SHIPYARD_SCRIPTS:?mavericks-shipyard not found; install it -- see its README}"
 command -v go >/dev/null || { echo "FATAL: need a stock arm64 bootstrap go on PATH" >&2; exit 1; }
 GOROOT_BOOTSTRAP=$(go env GOROOT); export GOROOT_BOOTSTRAP
 
 # inputs (same patches as native; @SSLDIR@ -> native CA convention path)
-SDK=$(sh "$MSC_SCRIPTS/fetch_sdk.sh"); export SDK
+SDK=$(sh "$SHIPYARD_SCRIPTS/fetch_sdk.sh"); export SDK
 [ -d "$SDK" ] || { echo "FATAL: 10.9 SDK not found: '$SDK'" >&2; exit 1; }
 sh "$here/fetch-go.sh"
 sh "$here/apply-patches.sh"
@@ -28,10 +28,10 @@ stage="$WORK/staging-cross"
 rm -rf "$stage"; mkdir -p "$stage$CROSS_PREFIX"
 ( cd "$WORK/go" && rm -rf pkg/obj pkg/bootstrap && pax -rw . "$stage$CROSS_PREFIX" )
 
-# amd64 shim + the pinned-SDK fetch scripts (self-contained first-use fetch, no shared-cmake at runtime)
+# amd64 shim + the pinned-SDK fetch scripts (self-contained first-use fetch, no shipyard at runtime)
 mkdir -p "$stage$CROSS_PREFIX/lib" "$stage$CROSS_PREFIX/libexec"
 cp "$LEGACY_A" "$stage$CROSS_PREFIX/lib/libMacportsLegacySupport.a"
-cp "$MSC_SCRIPTS/fetch_sdk.sh" "$MSC_SCRIPTS/mavericks_fetch.sh" "$stage$CROSS_PREFIX/libexec/"
+cp "$SHIPYARD_SCRIPTS/fetch_sdk.sh" "$SHIPYARD_SCRIPTS/mavericks_fetch.sh" "$stage$CROSS_PREFIX/libexec/"
 
 # Cross CC wrapper: force the amd64/10.9 target on every invocation (Go doesn't inject -arch on
 # darwin, so we must), and add the static shim + -Wl,-U allowances on LINK steps only.
