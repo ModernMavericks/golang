@@ -34,15 +34,21 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # A Go MINOR LINE is a product: lines/126 (and a future lines/127) build, publish and update
-  # independently. Decide the whole release plan ONCE here -- per line, what version and whether it
-  # publishes -- because a matrix job's outputs are last-writer-wins and GitHub does not expose the
-  # matrix context to a job-level `if`. Downstream jobs read the plan instead of recomputing it.
+  # This repo ships ONE line (lines/126). Decide its version and whether it publishes ONCE here, and
+  # let the other jobs read that decision rather than recompute it -- they must all agree about what
+  # is being built.
+  #
+  # Deliberately NOT a matrix, though lines/ can hold several. A matrix leg's status context embeds
+  # the version ("build (126, 1.26.8-mavericks.1)"), so it changes every release and can never be a
+  # required status check -- which left every Renovate PR here stuck on "Expected — waiting for
+  # status to be reported", unable to merge, for a month. A second line would also have coupled the
+  # lines: `publish` needs the whole matrix, so a failing 1.27 would have blocked a ready 1.26 from
+  # shipping. The family's answer is one repo per line, so this workflow builds one and says so.
   plan:
     runs-on: ubuntu-latest
     outputs:
-      lines: ${{ steps.p.outputs.lines }}
-      publish_lines: ${{ steps.p.outputs.publish_lines }}
+      line: ${{ steps.p.outputs.line }}
+      version: ${{ steps.p.outputs.version }}
       any_publish: ${{ steps.p.outputs.any_publish }}
     steps:
       - uses: actions/checkout@v7
@@ -58,39 +64,33 @@ jobs:
           if [ "${{ github.event_name }}" = workflow_dispatch ] && [ "${{ inputs.local_release }}" = "true" ]; then
             mode=local
           fi
-          all=''; pub=''
-          for d in lines/*/; do
-            line="$(basename "$d")"
-            if [ "$GITHUB_REF_TYPE" = tag ]; then
-              # A tag names exactly one line's release; the others just build.
-              up="$(tr -d '[:space:]' < "$d/UPSTREAM_VERSION")"
-              case "$GITHUB_REF_NAME" in
-                "$up"-mavericks.*) full="$GITHUB_REF_NAME"; rel=yes ;;
-                *) full="$(GO_LINE=$line sh build/version.sh auto | sed -n 's/^FULL=//p')"; rel=no ;;
-              esac
-            else
-              out="$(GO_LINE=$line sh build/version.sh "$mode")"
-              full="$(printf '%s\n' "$out" | sed -n 's/^FULL=//p')"
-              rel="$(printf '%s\n' "$out" | sed -n 's/^RELEASE=//p')"
-              # only main cuts releases; PRs and other branches never publish
-              [ "$GITHUB_REF_NAME" = main ] || rel=no
-            fi
-            item="{\"line\":\"$line\",\"version\":\"$full\"}"
-            all="$all$item,"
-            [ "$rel" = yes ] && pub="$pub$item,"
-            echo "line $line -> $full (publish=$rel)"
-          done
-          printf 'lines={"include":[%s]}\n' "${all%,}" >> "$GITHUB_OUTPUT"
-          printf 'publish_lines={"include":[%s]}\n' "${pub%,}" >> "$GITHUB_OUTPUT"
-          if [ -n "$pub" ]; then echo "any_publish=true" >> "$GITHUB_OUTPUT"; else echo "any_publish=false" >> "$GITHUB_OUTPUT"; fi
+          # One line, asserted -- not assumed. If a second lines/ dir ever appears, this workflow
+          # would silently build whichever the shell listed last and quietly not ship the other.
+          n="$(ls -d lines/*/ 2>/dev/null | wc -l | tr -d ' ')"
+          [ "$n" = 1 ] || { echo "::error::this workflow ships exactly one line, found $n in lines/ -- a second line belongs in its own repo"; exit 1; }
+          d="$(ls -d lines/*/)"; line="$(basename "$d")"
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            # A tag names this line's release; anything else just builds.
+            up="$(tr -d '[:space:]' < "$d/UPSTREAM_VERSION")"
+            case "$GITHUB_REF_NAME" in
+              "$up"-mavericks.*) full="$GITHUB_REF_NAME"; rel=yes ;;
+              *) full="$(GO_LINE=$line sh build/version.sh auto | sed -n 's/^FULL=//p')"; rel=no ;;
+            esac
+          else
+            out="$(GO_LINE=$line sh build/version.sh "$mode")"
+            full="$(printf '%s\n' "$out" | sed -n 's/^FULL=//p')"
+            rel="$(printf '%s\n' "$out" | sed -n 's/^RELEASE=//p')"
+            # only main cuts releases; PRs and other branches never publish
+            [ "$GITHUB_REF_NAME" = main ] || rel=no
+          fi
+          echo "line $line -> $full (publish=$rel)"
+          { echo "line=$line"; echo "version=$full"; } >> "$GITHUB_OUTPUT"
+          if [ "$rel" = yes ]; then echo "any_publish=true" >> "$GITHUB_OUTPUT"; else echo "any_publish=false" >> "$GITHUB_OUTPUT"; fi
 
   build:
     needs: plan
-    strategy:
-      fail-fast: false      # one line's breakage must not cancel another's build
-      matrix: ${{ fromJSON(needs.plan.outputs.lines) }}
     env:
-      GO_LINE: ${{ matrix.line }}
+      GO_LINE: ${{ needs.plan.outputs.line }}
     runs-on: macos-26   # Apple Silicon (arm64) — mirrors local Tahoe; use macos-15 if 26 is unavailable
     steps:
       - uses: actions/checkout@v7
@@ -111,7 +111,7 @@ jobs:
         id: ver
         run: |
           set -eu
-          full="${{ matrix.version }}"
+          full="${{ needs.plan.outputs.version }}"
           printf '%s\n' "$full" > VERSION
           { echo "full=$full"; echo "tag=$full"; } >> "$GITHUB_OUTPUT"
           echo "line=$GO_LINE version=$full"
@@ -181,7 +181,7 @@ jobs:
         run: UPD_APP="build/updater-cross/GoCrossUpdater.app" sh build/package-cross-pkg.sh
 
       - name: EdDSA-sign both .pkgs + generate both Sparkle appcasts
-        if: contains(needs.plan.outputs.publish_lines, format('"line":"{0}"', matrix.line))
+        if: needs.plan.outputs.any_publish == 'true'
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
           GH_TOKEN: ${{ github.token }}   # sign_and_appcast.sh fetches ed25519-sign via `gh` -> needs auth (else 403 rate-limit)
@@ -231,36 +231,33 @@ jobs:
       # Gated like the signing step: a non-publishing build has no appcast, and this is a question
       # about a release, not about a build.
       - name: Artifact conformance
-        if: contains(needs.plan.outputs.publish_lines, format('"line":"{0}"', matrix.line))
+        if: needs.plan.outputs.any_publish == 'true'
         run: |
-          sh "$SHIPYARD_SCRIPTS/artifact-facts.sh" dist "${{ matrix.version }}" \
+          sh "$SHIPYARD_SCRIPTS/artifact-facts.sh" dist "${{ needs.plan.outputs.version }}" \
             | sh "$SHIPYARD_SCRIPTS/check-artifact-conformance.sh"
           # Behavior gate, per appcast: a client on this LINE's previous release must SEE this as an
           # upgrade -- a numeric sparkle:version ordering strictly after the last published tag IN THIS
           # LINE. Scope the tag search to the line (1.26.5-mavericks.5 -> glob 1.26.*) so 1.26.7
           # compares against 1.26.5, not a 1.27.0 shipped between. Both native + cross carry this VER.
-          GLOB="$(printf '%s' "${{ matrix.version }}" | sed 's/-mavericks\..*//' | cut -d. -f1,2).*"
+          GLOB="$(printf '%s' "${{ needs.plan.outputs.version }}" | sed 's/-mavericks\..*//' | cut -d. -f1,2).*"
           for a in appcast.xml appcast-cross.xml; do
-            sh "$SHIPYARD_SCRIPTS/assert_appcast_upgradeable.sh" --appcast "dist/$a" --version "${{ matrix.version }}" --upstream-glob "$GLOB"
+            sh "$SHIPYARD_SCRIPTS/assert_appcast_upgradeable.sh" --appcast "dist/$a" --version "${{ needs.plan.outputs.version }}" --upstream-glob "$GLOB"
           done
 
       - uses: actions/upload-artifact@v7
         with:
-          name: golang-go${{ matrix.line }}
+          name: golang-go${{ needs.plan.outputs.line }}
           path: dist/*
 
   publish:
     needs: [plan, build]
     if: needs.plan.outputs.any_publish == 'true'
-    strategy:
-      max-parallel: 1       # one line at a time: each publish mints a tag
-      matrix: ${{ fromJSON(needs.plan.outputs.publish_lines) }}
     permissions:
       contents: write
     uses: ModernMavericks/shipyard/.github/workflows/publish-release.yml@v1
     with:
-      version: ${{ matrix.version }}
-      artifact: golang-go${{ matrix.line }}
+      version: ${{ needs.plan.outputs.version }}
+      artifact: golang-go${{ needs.plan.outputs.line }}
 
   # The per-line UPDATE FEED. Sparkle installs poll a fixed URL, so it cannot be the repo's /latest/
   # release -- that follows whichever LINE published most recently, which would offer a 1.26 user a
@@ -270,22 +267,19 @@ jobs:
   feed:
     needs: [plan, publish]
     if: needs.plan.outputs.any_publish == 'true'
-    strategy:
-      max-parallel: 1
-      matrix: ${{ fromJSON(needs.plan.outputs.publish_lines) }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v8
         with:
-          name: golang-go${{ matrix.line }}
+          name: golang-go${{ needs.plan.outputs.line }}
           path: dist
-      - name: Point feed-${{ matrix.line }} at ${{ matrix.version }}
+      - name: Point feed-${{ needs.plan.outputs.line }} at ${{ needs.plan.outputs.version }}
         env:
           GH_TOKEN: ${{ github.token }}
-          LINE: ${{ matrix.line }}
-          VER: ${{ matrix.version }}
+          LINE: ${{ needs.plan.outputs.line }}
+          VER: ${{ needs.plan.outputs.version }}
         run: |
           set -eu
           ls dist/appcast.xml dist/appcast-cross.xml >/dev/null   # a feed with no appcast is a broken product
