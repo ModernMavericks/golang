@@ -8,7 +8,7 @@ A=$(sh "$here/build-legacy-support.sh" | tail -1)
 [ -f "$A" ] || { echo "FAIL: no .a at '$A'"; exit 1; }
 [ "$A" = "$MAVERICKS_WORK/legacy-support/lib/libMacportsLegacySupport.a" ] \
   || { echo "FAIL: unexpected .a path: $A"; exit 1; }
-[ "$(lipo -archs "$A")" = x86_64 ] || { echo "FAIL: .a not x86_64-only"; exit 1; }
+[ "$(lipo -info "$A" | sed -n 's/.*: //p' | xargs)" = x86_64 ] || { echo "FAIL: .a not x86_64-only"; exit 1; }
 [ -d "$MAVERICKS_WORK/legacy-support/include/LegacySupport" ] \
   || { echo "FAIL: LegacySupport headers not extracted"; exit 1; }
 
