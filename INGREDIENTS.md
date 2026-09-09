@@ -11,11 +11,28 @@ port. An own-upstream bump cuts `<upstream>-mavericks.1`; an ingredient bump cut
 | Go source (own upstream) | `lines/<line>/UPSTREAM_VERSION` | ✅ `golang-version` datasource, patch-automerged | `release.yml` on push to main cuts `-mavericks.1` |
 | macports-legacy-support shim (prebuilt) | `MLS_VERSION # mavericks-legacysupport` in `build/versions.sh` (shared by every line) | ✅ shared preset's `# mavericks-legacysupport` customManager | `build/versions.sh` is a watched path → repackage dispatched |
 | curl.se CA bundle | `vendor/cacert.pem`, hash-pinned by `CA_SHA256` in `build/versions.sh` | ❌ **untrackable — manual refresh** (see below) | both are watched paths → repackage dispatched when the refresh lands |
+| Bootstrap Go (builds the toolchain) | `go-version:` on `actions/setup-go` in `.github/workflows/release.yml` | ✅ github-actions `uses-with`, **capped to this line** (`<1.27`) | `release.yml` is not a watched path, so cut the repackage deliberately |
 | MacOSX10.9 SDK, Sparkle framework | `ModernMavericks/shipyard@v1` | ✅ github-actions manager tracks the tag | `@v1` is a *moving* tag, so content moves without any path changing (see below) |
 
 Not ingredients: `lines/<line>/patches/` and the build scripts are this repo's own recipe — a change there is
 a repackage you cut deliberately (`workflow_dispatch` with `local_release=true`), not something
 Renovate drives.
+
+## Why the bootstrap Go is capped to this line
+
+Go is self-hosting: the `go-version` handed to `actions/setup-go` is the compiler that builds the
+toolchain we ship. That makes it an ingredient, not CI housekeeping, and it went undeclared here
+until it proved the point — Renovate opened "update dependency go to 1.27.x" against a repo capped
+to 1.26.x, and it was mergeable. Automerge is ship-if-green, so nothing but a passing build stood
+between us and a 1.26 toolchain built by a 1.27 compiler.
+
+Two things were wrong with that. Changing the compiler changes a shipped artifact's inputs with no
+upstream reason — `UPSTREAM_VERSION` is still 1.26.5, so the product did not change, only how it was
+made. And "1.27" has no business appearing in a repo that must never build it: a new Go line is a
+new repo, and `NEXT-LINE-WATCH` is the thing that tells us one exists.
+
+So it is capped `<1.27` like the line itself, and still tracked within it: 1.26.x bootstrap updates
+land normally. Raising the cap is the same deliberate act as creating a new line repo.
 
 ## Why the CA bundle is untracked
 

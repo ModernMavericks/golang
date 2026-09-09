@@ -25,6 +25,13 @@
         "go-126"
       ],
       "allowedVersions": "<1.27"
+    },
+    {
+      "description": "The BOOTSTRAP Go (actions/setup-go) stays on this repo's line too. Go is self-hosting, so this is the compiler that builds the toolchain we ship -- an ingredient, not CI trivia. Left uncapped it automerged its way onto 1.27 in a repo capped to 1.26.x, silently changing a shipped artifact's inputs with a green build as the only signal, and putting the string '1.27' in a repo that must never build it. A new Go line is a new repo; NEXT-LINE-WATCH is what tells us one exists.",
+      "matchDepNames": [
+        "go"
+      ],
+      "allowedVersions": "<1.27"
     }
   ]
 }
