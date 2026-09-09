@@ -10,7 +10,7 @@ file="go${VER}.src.tar.gz"
 if [ -n "${GO_DL_JSON:-}" ]; then
   feed="$GO_DL_JSON"
 else
-  feed="$(mktemp)"
+  feed="$(mktemp "${TMPDIR:-/tmp}/go-src-sha256.XXXXXX")"   # template: 10.9 BSD mktemp requires one
   curl -fSL -o "$feed" 'https://go.dev/dl/?mode=json&include=all'
 fi
 

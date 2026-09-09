@@ -3,7 +3,7 @@
 set -eu
 here="$(cd "$(dirname "$0")" && pwd)"
 script="$here/../build/go-src-sha256.sh"
-tmp="$(mktemp -d)"
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/go-src-sha256-test.XXXXXX")"   # template: 10.9 BSD mktemp requires one
 trap 'rm -rf "$tmp"' EXIT
 
 cat > "$tmp/feed.json" <<'JSON'

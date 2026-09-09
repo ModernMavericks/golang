@@ -29,7 +29,7 @@ rm -f "$p2"
 # broken environment, not a degraded one: fail loudly rather than quietly returning notes with no
 # ingredient section. (The old per-repo copy warned and carried on; a warning nobody reads is how a
 # release silently loses its section.)
-empty="$(mktemp -d)"
+empty="$(mktemp -d "${TMPDIR:-/tmp}/release-notes-file-test.XXXXXX")"   # template: 10.9 BSD mktemp requires one
 if SHIPYARD_SCRIPTS="$empty" sh "$script" 9.9.9-mavericks.1 9.9.9-mavericks.1 >/dev/null 2>&1; then
   echo "FAIL a scripts dir without release-notes-file.sh must fail, not silently degrade"; exit 1
 fi

@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 here=$(cd "$(dirname "$0")/../build" && pwd)          # test/ -> build/
-TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
+TMP=$(mktemp -d "${TMPDIR:-/tmp}/legacy-support-fetch.XXXXXX"); trap 'rm -rf "$TMP"' EXIT   # template: 10.9 BSD mktemp requires one
 export MAVERICKS_WORK="$TMP/work"                     # keep all artifacts out of the repo
 
 A=$(sh "$here/build-legacy-support.sh" | tail -1)
