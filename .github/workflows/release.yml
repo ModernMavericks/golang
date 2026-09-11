@@ -270,7 +270,7 @@ jobs:
   # publish attaches -- and feed, which only copies those appcasts, follows publish.
   scan:
     needs: [plan, build]
-    if: needs.plan.outputs.any_publish == 'true'
+    if: always() && (needs.plan.outputs.any_publish == 'true')   # a build that fails after signing left logs too; scan them
     permissions:
       actions: read     # this run's job logs
       contents: read
