@@ -193,6 +193,31 @@ jobs:
       - name: Package the cross .pkg + tarball + manifest
         run: UPD_APP="build/updater-cross/GoCrossUpdater.app" sh build/package-cross-pkg.sh
 
+      # The body travels IN the artifact: publish-release.yml does not check out the repo. One call
+      # writes the file both sign_and_appcast.sh invocations below (native + cross) and the Release
+      # body consume -- the same bytes, so the page and Sparkle's update dialog cannot disagree.
+      #
+      # --min-os 10.9.5 describes the NATIVE .pkg (the flagship most users install), not the cross
+      # variant -- the cross appcast below carries its own real floor (--min-os 11.0) independently.
+      #
+      # --line wants the upstream tag-glob prefix ("1.26"), NOT the product id GO_LINE ("126") this
+      # job already carries -- GO_LINE names the install prefix (/usr/local/go126); it is not the
+      # dotted version prefix every "<line>-mavericks.*" tag actually starts with. Passing GO_LINE
+      # verbatim here would silently match no tag (none begins with "126"), which drops the
+      # ingredient section AND the compare link on every future release -- confirmed by generating
+      # both ways against this repo's real tags before wiring this in. Derived from VER, which the
+      # plan job already resolved for this line.
+      - name: Stage release notes
+        run: |
+          set -eu
+          mkdir -p dist
+          VER="${{ steps.ver.outputs.full }}"
+          LINE="$(printf '%s' "$VER" | cut -d. -f1,2)"
+          sh "$SHIPYARD_SCRIPTS/release-notes.sh" \
+            --tag "${{ steps.ver.outputs.tag }}" --version "$VER" \
+            --product Go --line "$LINE" --min-os 10.9.5 \
+            --out dist/RELEASE_NOTES.md
+
       - name: EdDSA-sign both .pkgs + generate both Sparkle appcasts
         if: needs.plan.outputs.any_publish == 'true'
         env:
@@ -204,7 +229,6 @@ jobs:
           SH="$SHIPYARD_SCRIPTS"   # exported by install@v1; don't re-derive it from the registry
           [ -d "$SH" ] || { echo "::error::SHIPYARD_SCRIPTS not set by install@v1"; exit 1; }
           VER="${{ steps.ver.outputs.full }}"; TAG="${{ steps.ver.outputs.tag }}"
-          NOTES="$(sh build/release-notes-file.sh "$TAG" "$VER")"
           OUT="$HOME/.cache/mavericks-golang/work/out"
           base="https://github.com/${GITHUB_REPOSITORY}/releases/download/$TAG"
           NPKG=$(ls "$OUT"/*native*.pkg | head -1)
@@ -212,13 +236,13 @@ jobs:
           # native -> appcast.xml (10.9.5 floor)
           sh "$SH/sign_and_appcast.sh" \
             --channel-title "Mavericks Go 1.26" --version "$VER" \
-            --pkg-url "$base/$(basename "$NPKG")" --notes-file "$NOTES" \
+            --pkg-url "$base/$(basename "$NPKG")" --notes-file dist/RELEASE_NOTES.md \
             --pkg "$NPKG" --min-os 10.9.5 > "$OUT/appcast.xml"
           XPKG=$(ls "$OUT"/*cross*.pkg | head -1)
           # cross -> appcast-cross.xml (modern floor: the updater is arm64/min-11)
           sh "$SH/sign_and_appcast.sh" \
             --channel-title "Mavericks Go 1.26 (cross)" --version "$VER" \
-            --pkg-url "$base/$(basename "$XPKG")" --notes-file "$NOTES" \
+            --pkg-url "$base/$(basename "$XPKG")" --notes-file dist/RELEASE_NOTES.md \
             --pkg "$XPKG" --min-os 11.0 > "$OUT/appcast-cross.xml"
           echo "=== appcast.xml ==="; cat "$OUT/appcast.xml"
           echo "=== appcast-cross.xml ==="; cat "$OUT/appcast-cross.xml"
@@ -231,13 +255,8 @@ jobs:
           for f in appcast.xml appcast-cross.xml; do [ -f "$OUT/$f" ] && cp "$OUT/$f" dist/ || true; done
           # What each variant was built from -- conformance compares them, and a reader can see it.
           for f in build-info-native.txt build-info-cross.txt; do [ -f "$OUT/$f" ] && cp "$OUT/$f" dist/ || true; done
-          # The body travels IN the artifact: publish-release.yml does not check out the repo. Same
-          # generated file the appcasts used, so the Release page and Sparkle tell one story and both
-          # name which build ingredients changed. No SHA256SUMS here -- the workflow regenerates it
-          # over everything it attaches.
-          NOTES="$(sh build/release-notes-file.sh "${{ steps.ver.outputs.tag }}" "${{ steps.ver.outputs.full }}" || true)"
-          if [ -n "$NOTES" ] && [ -s "$NOTES" ]; then cp "$NOTES" dist/RELEASE_NOTES.md
-          else printf '## %s\n\nAutomated release.\n' "${{ steps.ver.outputs.full }}" > dist/RELEASE_NOTES.md; fi
+          # dist/RELEASE_NOTES.md was already staged above -- the SAME bytes both appcasts used, so
+          # the Release page and Sparkle's update dialog cannot tell two different stories.
 
       # Conformance: do the artifacts we are about to publish agree with each other and with the
       # family? Every piece is checked somewhere already -- the compat guard reads binaries,
