@@ -21,9 +21,25 @@ rm -rf "$WORK/go"
 sh "$here/../../build/fetch-go.sh"
 sh "$here/../../build/apply-patches.sh"
 ( cd "$WORK/go/src" && GOROOT_BOOTSTRAP="$GOROOT_BOOTSTRAP" ./make.bash ) 1>&2
-out=$(GOROOT="$WORK/go" "$WORK/go/bin/go" test crypto/x509 -run KeychainUnion -count=1 -v 2>&1)
+out=$(GOROOT="$WORK/go" "$WORK/go/bin/go" test crypto/x509 -run 'KeychainUnion|Fallback' -count=1 -v 2>&1)
 printf '%s\n' "$out"
 printf '%s\n' "$out" | grep -q '^ok[[:space:]]' || { echo "FATAL: crypto/x509 trust tests did not pass" >&2; exit 1; }
+# On CI a skipped trust test is a failure: the Apple-verifier tests skip only when the host's
+# keychain doesn't trust the fixture, and CI's macOS does, so a skip there hides a broken path.
+# Subtests print indented, so match any leading space.
+if [ -n "${CI:-}" ]; then
+  skipped=$(printf '%s\n' "$out" | grep -E '^[[:space:]]*--- SKIP: Test[A-Za-z_]*KeychainUnion' || true)
+  [ -z "$skipped" ] || { printf 'FATAL: KeychainUnion tests skipped on CI (they must run):\n%s\n' "$skipped" >&2; exit 1; }
+fi
 passed=$(printf '%s\n' "$out" | grep -c '^--- PASS: Test[A-Za-z_]*KeychainUnion')
-[ "$passed" -ge 5 ] || { echo "FATAL: expected >=5 KeychainUnion tests to run+pass, saw $passed -- did -run match nothing?" >&2; exit 1; }
+# Top-level tests only: 10 portable + 6 darwin, all of which run on CI (the skip guard above).
+[ "$passed" -ge 16 ] || { echo "FATAL: expected >=16 KeychainUnion tests to run+pass, saw $passed -- did -run match nothing?" >&2; exit 1; }
+for t in TestFallback TestFallbackPanic; do
+  printf '%s\n' "$out" | grep -q "^--- PASS: $t " || { echo "FATAL: upstream $t did not pass" >&2; exit 1; }
+done
+# CI's macOS can't exercise the 10.9 fix in systemVerify, so assert it in the source: the SSL
+# policy goes to SecTrustCreateWithCertificates directly, because on OS X 10.9 SecTrustEvaluate
+# faults when the policies argument is a CFArray (one built by CFArrayCreateMutable).
+grep -q 'SecTrustCreateWithCertificates(certs, sslPolicy)' "$WORK/go/src/crypto/x509/root_darwin.go" \
+  || { echo "FATAL: root_darwin.go no longer passes the SSL policy directly to SecTrustCreateWithCertificates -- 10.9's SecTrustEvaluate faults on a policies CFArray" >&2; exit 1; }
 echo "unit-trust OK ($passed trust tests passed)"
